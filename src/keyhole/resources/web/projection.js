@@ -72,6 +72,24 @@
     });
   }
 
+  function orthographic(longitude, latitude, rotation, radius, centerX, centerY) {
+    var radians = Math.PI / 180;
+    var lambda = (finite(longitude, 0) - finite(rotation.longitude, 0)) * radians;
+    var phi = finite(latitude, 0) * radians;
+    var phi0 = finite(rotation.latitude, 0) * radians;
+    var cosineLatitude = Math.cos(phi);
+    var cosineCenter = Math.cos(phi0);
+    var sineCenter = Math.sin(phi0);
+    var depth = sineCenter * Math.sin(phi) + cosineCenter * cosineLatitude * Math.cos(lambda);
+    return {
+      x: finite(centerX, 0) + finite(radius, 1) * cosineLatitude * Math.sin(lambda),
+      y: finite(centerY, 0) - finite(radius, 1) *
+        (cosineCenter * Math.sin(phi) - sineCenter * cosineLatitude * Math.cos(lambda)),
+      depth: depth,
+      visible: depth >= 0
+    };
+  }
+
   function clamp(value, minimum, maximum) {
     return Math.max(minimum, Math.min(maximum, value));
   }
@@ -80,6 +98,7 @@
     bounds: bounds,
     clamp: clamp,
     initialView: initialView,
+    orthographic: orthographic,
     project: project
   });
 })(window);

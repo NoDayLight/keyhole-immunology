@@ -121,3 +121,11 @@ Decisions are append-only and identify the spec boundary that introduced them.
 - Replay resets the same seeded state. Hover hit testing is revalidated every animation frame so evidence cannot remain attached to a particle that has moved away. A single idempotent teardown covers initialization, selection, replay, animation, resize, media-change failures, and normal destroy.
 - Reduced-motion or unavailable canvas schedules no animation and opens the retained five-stage `flowSvg`; the selected candidate’s sequence, verdict, plain language, binding grid, reasons, and R2 molecular scene remain available.
 - R3 changed browser/report bytes only. Fixed-epoch SKCM `results.json` remained byte-identical at SHA-256 `8a16e6e9e0b04ce1537edb46b7ebe54cf76f7b5a5dd5a9ae6529579b86452b53`. All 60 tests, Ruff, JavaScript syntax, and diff checks passed; offline forbidden-string checks remained unchanged.
+
+## R4 — 2026-08-24 — Truth-labeled orthographic population atlas
+
+- `KEYHOLEProjection.orthographic` is an additive latitude/longitude API returning x/y, depth, and front-hemisphere visibility. The existing molecular `project()` perspective implementation remains unchanged.
+- The atlas globe is persistently labeled exactly `Schematic — data real, geometry illustrative`. AFR/AMR/EAS/EUR marker locations and graticule are explicitly illustrative; marker values come directly from the selected candidate’s serialized population coverage. `ALL_OBSERVED` is shown only as a cohort-weighted text summary, never a geographic or worldwide estimate.
+- Pointer drag, aligned arrow-key controls, Home, and Reset rotate or restore the deterministic view. Logical and CSS dimensions track the actual responsive container, preserving circular orthographic geometry on narrow displays.
+- Exact five-row population coverage and sorted 26-allele evidence tables are built independently of canvas and remain visible at all times, including canvas failure. SAS absence, seed/draw assumptions, unknown unmodeled alleles, and the non-worldwide caveat remain explicit.
+- R4 changes browser/report bytes only. Fixed-epoch SKCM `results.json` remained byte-identical at SHA-256 `8a16e6e9e0b04ce1537edb46b7ebe54cf76f7b5a5dd5a9ae6529579b86452b53`. All 61 tests, Ruff, JavaScript syntax, and diff checks passed; offline injection/network contracts remain green.

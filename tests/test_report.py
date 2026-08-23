@@ -181,7 +181,7 @@ def test_browser_sources_avoid_atlas_markup_injection_and_clean_up_listeners() -
     main = (WEB / "main.js").read_text(encoding="utf-8")
     funnel = (WEB / "funnel.js").read_text(encoding="utf-8")
     assert "innerHTML" not in atlas
-    assert "createElementNS" in atlas and "textContent" in atlas
+    assert 'canvas.getContext("2d"' in atlas and "textContent" in atlas
     assert 'removeEventListener("toggle"' in main
     assert "if (tornDown)" in main
     assert "record.controller.destroy()" in main

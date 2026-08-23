@@ -102,3 +102,44 @@ def test_funnel_particles_are_seeded_serialized_and_fallback_safe() -> None:
     assert "function teardown()" in source and "function fail(error)" in source
     assert "return { destroy: teardown }" in source
     assert "try { update(); }" in source
+
+
+def test_population_globe_uses_additive_orthographic_projection_and_real_values() -> None:
+    projection = (WEB / "projection.js").read_text(encoding="utf-8")
+    atlas = (WEB / "atlas.js").read_text(encoding="utf-8")
+    assert (
+        "function orthographic(longitude, latitude, rotation, radius, centerX, centerY)"
+        in projection
+    )
+    assert "orthographic: orthographic" in projection
+    assert "function project(atoms, view, width, height)" in projection
+    assert "var perspective = 1 / Math.max" in projection
+    assert "project: project" in projection
+
+    assert 'ATLAS_TRUTH = "Schematic — data real, geometry illustrative"' in atlas
+    assert "global.KEYHOLEProjection.orthographic" in atlas
+    assert "drawGraticule" in atlas and "strokeProjected" in atlas
+    assert 'population.per_candidate_coverage[currentKey]' in atlas
+    assert 'population.peptide_allele_matrix[currentKey]' in atlas
+    for cohort in ("AFR", "AMR", "EAS", "EUR", "ALL_OBSERVED"):
+        assert cohort in atlas
+    assert "ILLUSTRATIVE_MARKERS" in atlas
+    assert 'Number(currentCoverage.ALL_OBSERVED).toFixed(2)' in atlas
+    assert "not worldwide" in atlas and "SAS is absent" in atlas
+    assert 'canvas.getContext("2d"' in atlas
+    table_position = atlas.index("Exact serialized population coverage")
+    context_position = atlas.index('canvas.getContext("2d"')
+    assert table_position < context_position
+    assert 'canvas.addEventListener("pointermove", pointerMove)' in atlas
+    assert 'canvas.addEventListener("keydown", keyDown)' in atlas
+    assert "Reset globe" in atlas and 'event.key === "Home"' in atlas
+    assert 'event.key === "ArrowRight") { rotation.longitude -= 8; }' in atlas
+    assert 'event.key === "ArrowDown") { rotation.latitude += 6; }' in atlas
+    assert "Math.max(1, Math.round(host.clientWidth || 900))" in atlas
+    assert 'canvas.style.height !== size.height + "px"' in atlas
+    assert "if (canvas.width !== pixelWidth)" in atlas
+    assert "if (canvas.height !== pixelHeight)" in atlas
+    assert 'removeEventListener("pointermove", pointerMove)' in atlas
+    assert 'removeEventListener("keydown", keyDown)' in atlas
+    assert "return { destroy: teardown }" in atlas
+    assert "innerHTML" not in atlas
