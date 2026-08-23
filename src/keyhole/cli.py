@@ -10,6 +10,7 @@ from collections.abc import Sequence
 from pathlib import Path
 
 from keyhole import __version__
+from keyhole.assets import packaged_file
 from keyhole.bind import ALLELES, load_binder, validate_binder
 from keyhole.data import load_literature_records, pdb_path
 from keyhole.parse import parse_famous
@@ -54,9 +55,7 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def _quick_validation() -> dict[str, object]:
-    fixture = Path(__file__).resolve().parents[2] / "tests" / "fixtures" / "results.sample.json"
-    if not fixture.is_file():
-        fixture = Path.cwd() / "tests" / "fixtures" / "results.sample.json"
+    fixture = packaged_file("validation/results.sample.json")
     validate_results(json.loads(fixture.read_text(encoding="utf-8")))
     binder = load_binder()
     panels = frequency_panels()

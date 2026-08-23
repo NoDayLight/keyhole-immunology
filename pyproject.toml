@@ -28,6 +28,21 @@ package-dir = {"" = "src"}
 [tool.setuptools.packages.find]
 where = ["src"]
 
+[tool.setuptools.package-data]
+keyhole = [
+  "resources/data/SOURCES.md",
+  "resources/data/iedb/*.gz",
+  "resources/data/iedb/binder/*.json",
+  "resources/data/iedb/binder/*.npz",
+  "resources/data/self_peptidome/*.gz",
+  "resources/data/hla_freq/*.tsv",
+  "resources/data/literature/*.tsv",
+  "resources/data/residues/*.json",
+  "resources/data/pdb/*.pdb",
+  "resources/web/*.js",
+  "resources/validation/*.json",
+]
+
 [tool.pytest.ini_options]
 addopts = "-ra"
 testpaths = ["tests"]

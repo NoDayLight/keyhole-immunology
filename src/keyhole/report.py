@@ -11,6 +11,7 @@ from collections.abc import Mapping
 from html import escape
 from pathlib import Path
 
+from keyhole.assets import packaged_directory
 from keyhole.bind import ALLELES
 from keyhole.schema import Verdict, validate_results
 from keyhole.structure import schematic_peptide_scene, structure_payload
@@ -27,13 +28,12 @@ SCRIPT_ORDER = (
 
 
 def web_root() -> Path:
-    """Resolve checked-in browser assets without a network or build step."""
+    """Resolve wheel-installed browser assets without a network or build step."""
 
-    candidates = (Path.cwd() / "web", Path(__file__).resolve().parents[2] / "web")
-    for candidate in candidates:
-        if all((candidate / name).is_file() for name in SCRIPT_ORDER):
-            return candidate
-    raise FileNotFoundError("KEYHOLE browser assets are unavailable")
+    candidate = packaged_directory("web")
+    if not all((candidate / name).is_file() for name in SCRIPT_ORDER):
+        raise FileNotFoundError("KEYHOLE browser assets are incomplete")
+    return candidate
 
 
 def _json_text(value: object) -> str:

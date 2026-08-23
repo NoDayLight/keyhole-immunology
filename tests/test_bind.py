@@ -8,6 +8,7 @@ import struct
 from pathlib import Path
 
 import numpy as np
+import pytest
 import torch
 
 from keyhole.bind import (
@@ -135,3 +136,13 @@ def test_artifact_directory_is_within_frozen_iedb_tree() -> None:
     artifact_dir = (data_root() / ARTIFACT_DIRECTORY).resolve()
     assert artifact_dir.parent == (data_root() / "iedb").resolve()
     assert all(path.is_file() for path in Path(artifact_dir).iterdir())
+
+
+def test_training_cannot_target_installed_frozen_resources() -> None:
+    from keyhole.bind import train_binder
+
+    frozen_data = data_root()
+    with pytest.raises(ValueError, match="installed frozen resources"):
+        train_binder(frozen_data / ARTIFACT_DIRECTORY)
+    with pytest.raises(ValueError, match="installed frozen resources"):
+        train_binder(frozen_data / ARTIFACT_DIRECTORY / "nested")

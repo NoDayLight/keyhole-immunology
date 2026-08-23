@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
-from pathlib import Path
+from keyhole.report import web_root
 
-WEB = Path(__file__).resolve().parents[1] / "web"
+WEB = web_root()
 
 
 def test_scene_assets_are_local_iifes_without_network_paths() -> None:

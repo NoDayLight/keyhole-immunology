@@ -13,10 +13,10 @@ import pytest
 from keyhole.bind import ALLELES, BindingPrediction
 from keyhole.parse import parse_famous
 from keyhole.pipeline import screen_variants
-from keyhole.report import SCRIPT_ORDER, render_report, write_report
+from keyhole.report import SCRIPT_ORDER, render_report, web_root, write_report
 from keyhole.schema import validate_results
 
-WEB = Path(__file__).parents[1] / "web"
+WEB = web_root()
 LITERATURE_STUB = {
     "agreement_stats": {
         "matched_decoy_evaluable": 0,

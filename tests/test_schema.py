@@ -8,9 +8,10 @@ from pathlib import Path
 
 import pytest
 
+from keyhole.assets import packaged_file
 from keyhole.schema import PROJECT_SEED, SCHEMA_VERSION, SchemaError, dump_results, validate_results
 
-FIXTURE = Path(__file__).parent / "fixtures" / "results.sample.json"
+FIXTURE = packaged_file("validation/results.sample.json")
 
 
 def load_fixture() -> dict:

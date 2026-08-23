@@ -23,6 +23,7 @@ import numpy as np
 import torch
 from torch import nn
 
+from keyhole.assets import packaged_directory
 from keyhole.data import BindingRecord, data_root, iter_binding_records, iter_self_peptides
 
 SEED = 1729
@@ -498,18 +499,21 @@ def _artifact_filename(allele: str) -> str:
 
 
 def train_binder(
-    output_dir: str | Path | None = None,
+    output_dir: str | Path,
     *,
     epochs: int = DEFAULT_EPOCHS,
     learning_rate: float = DEFAULT_LEARNING_RATE,
 ) -> dict[str, object]:
-    """Train all 26 deterministic CPU models and write safe frozen artifacts."""
+    """Train all 26 models into an explicit writable artifact directory."""
 
     if epochs <= 0:
         raise ValueError("epochs must be positive")
     if not math.isfinite(learning_rate) or learning_rate <= 0:
         raise ValueError("learning_rate must be finite and positive")
-    destination = Path(output_dir) if output_dir is not None else data_root() / ARTIFACT_DIRECTORY
+    destination = Path(output_dir).expanduser().resolve()
+    frozen_data = packaged_directory("data").resolve()
+    if destination == frozen_data or frozen_data in destination.parents:
+        raise ValueError("training output cannot target installed frozen resources")
     start_time = time.perf_counter()
     _configure_deterministic_torch()
     records = _validated_records()

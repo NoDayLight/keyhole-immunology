@@ -12,6 +12,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, TextIO
 
+from keyhole.assets import packaged_directory, safe_child
+
 CANONICAL_AMINO_ACIDS = frozenset("ACDEFGHIKLMNPQRSTVWY")
 
 
@@ -55,31 +57,20 @@ class LiteratureRecord:
 
 
 def data_root() -> Path:
-    """Locate frozen data without network access.
-
-    ``KEYHOLE_DATA`` takes precedence. A source checkout is then detected from
-    the current directory, followed by the path adjacent to the package's
-    ``src`` directory.
-    """
+    """Locate complete frozen data from an explicit override or the installed wheel."""
 
     configured = os.environ.get("KEYHOLE_DATA")
-    candidates = [
-        Path(configured).expanduser() if configured else None,
-        Path.cwd() / "data",
-        Path(__file__).resolve().parents[2] / "data",
-    ]
-    for candidate in candidates:
-        if candidate is not None and (candidate / "SOURCES.md").is_file():
-            return candidate
-    raise FileNotFoundError(
-        "KEYHOLE frozen data not found; run from the repository or set KEYHOLE_DATA"
-    )
+    root = Path(configured).expanduser().resolve() if configured else packaged_directory("data")
+    if not (root / "SOURCES.md").is_file():
+        origin = "KEYHOLE_DATA" if configured else "installed package"
+        raise FileNotFoundError(f"{origin} does not contain a complete KEYHOLE data root: {root}")
+    return root
 
 
 def asset_path(relative: str) -> Path:
-    """Return an existing path below the frozen data root."""
+    """Return an existing, non-traversing path below the frozen data root."""
 
-    path = data_root() / relative
+    path = safe_child(data_root(), relative)
     if not path.is_file():
         raise FileNotFoundError(f"required frozen asset is missing: {path}")
     return path
