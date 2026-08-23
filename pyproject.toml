@@ -37,7 +37,7 @@ keyhole = [
   "resources/data/self_peptidome/*.gz",
   "resources/data/hla_freq/*.tsv",
   "resources/data/literature/*.tsv",
-  "resources/data/residues/*.json",
+  "resources/data/residues/famous_proteins.json",
   "resources/data/pdb/*.pdb",
   "resources/web/*.js",
   "resources/validation/*.json",

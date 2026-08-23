@@ -25,7 +25,6 @@ def test_packaged_runtime_closure_is_complete() -> None:
         "hla_freq/1000g_hla_ab_two_field_frequencies.tsv",
         "literature/tumor_epitopes.tsv",
         "residues/famous_proteins.json",
-        "residues/standard_amino_acid_ideal_coordinates.json",
         "pdb/1AO7.pdb",
         "pdb/1HHK.pdb",
         "pdb/3PWN.pdb",

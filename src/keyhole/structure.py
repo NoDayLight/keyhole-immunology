@@ -52,7 +52,7 @@ STRUCTURES: dict[str, dict[str, object]] = {
             "E": "TCR β chain",
         },
         "peptide": "LLFGYPVYV",
-        "citation": "Garboczi et al. Nature. 1996. DOI 10.1038/384134A0",
+        "citation": "Garboczi et al. Nature. 1996. DOI 10.1038/384134a0",
     },
 }
 

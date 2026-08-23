@@ -144,9 +144,6 @@ class BindingMLP(nn.Module):
         return self.linear3(hidden)
 
 
-AlleleBindingMLP = BindingMLP
-
-
 def _validate_peptide(peptide: str) -> str:
     if not isinstance(peptide, str):
         raise TypeError("peptide must be a string")
@@ -193,9 +190,6 @@ def assign_split(peptide: str, seed: int = SEED) -> str:
     if bucket < 9_000:
         return "validation"
     return "test"
-
-
-split_assignment = assign_split
 
 
 def _normalize_supported_allele(allele: str) -> str:
@@ -745,14 +739,6 @@ def load_binder(artifact_dir: str | Path | None = None) -> FrozenBinder:
         models[allele] = _model_from_arrays(arrays)
         calibrations[allele] = arrays["calibration_ic50_nm"]
     return FrozenBinder(models, calibrations, model_card)
-
-
-def predict_binding(
-    peptide: str, allele: str, *, binder: FrozenBinder | None = None
-) -> BindingPrediction:
-    """Load the frozen binder when needed and predict one peptide/allele pair."""
-
-    return (binder if binder is not None else load_binder()).predict(peptide, allele)
 
 
 def _verify_no_split_leakage(records: Sequence[BindingRecord]) -> dict[str, int]:

@@ -1,16 +1,15 @@
-"""Typed, deterministic access to KEYHOLE's frozen scientific datasets."""
+"""Deterministic, typed access to KEYHOLE's frozen scientific datasets."""
 
 from __future__ import annotations
 
 import csv
 import gzip
-import hashlib
 import json
 import os
 from collections.abc import Iterator
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, TextIO
+from typing import TextIO
 
 from keyhole.assets import packaged_directory, safe_child
 
@@ -126,12 +125,6 @@ def iter_self_peptides(*, limit: int | None = None) -> Iterator[str]:
                 yield peptide
 
 
-def load_self_peptides() -> frozenset[str]:
-    """Load the frozen self-peptidome sample for nearest-self queries."""
-
-    return frozenset(iter_self_peptides())
-
-
 def load_hla_frequencies() -> tuple[FrequencyRecord, ...]:
     """Load observed Phase-I HLA-A/B frequencies; absent populations stay absent."""
 
@@ -183,17 +176,6 @@ def load_famous_proteins() -> dict[str, dict[str, str]]:
     return {record["gene"]: record for record in raw}
 
 
-def load_residue_templates() -> dict[str, dict[str, Any]]:
-    """Load RCSB CCD ideal coordinates keyed by one-letter amino-acid code."""
-
-    raw = json.loads(
-        asset_path("residues/standard_amino_acid_ideal_coordinates.json").read_text(
-            encoding="utf-8"
-        )
-    )
-    return {record["one_letter_code"]: record for record in raw}
-
-
 def pdb_path(pdb_id: str) -> Path:
     """Resolve one of the verified frozen experimental PDB entries."""
 
@@ -201,13 +183,3 @@ def pdb_path(pdb_id: str) -> Path:
     if normalized not in {"1AO7", "1HHK", "3PWN"}:
         raise ValueError(f"PDB {normalized!r} is not in the verified frozen set")
     return asset_path(f"pdb/{normalized}.pdb")
-
-
-def sha256(relative: str) -> str:
-    """Compute an asset digest for provenance verification."""
-
-    digest = hashlib.sha256()
-    with asset_path(relative).open("rb") as handle:
-        for block in iter(lambda: handle.read(1024 * 1024), b""):
-            digest.update(block)
-    return digest.hexdigest()

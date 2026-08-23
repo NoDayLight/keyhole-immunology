@@ -13,7 +13,6 @@ from keyhole.data import (
     load_famous_proteins,
     load_hla_frequencies,
     load_literature_records,
-    load_residue_templates,
     pdb_path,
 )
 
@@ -52,10 +51,7 @@ def test_population_and_literature_snapshots_are_real_and_explicitly_narrowed() 
 
 
 def test_frozen_structural_assets_are_verified_not_generated() -> None:
-    templates = load_residue_templates()
     proteins = load_famous_proteins()
-    assert set(templates) == CANONICAL_AMINO_ACIDS
-    assert sum(len(item["atoms"]) for item in templates.values()) == 387
     assert proteins["BRAF"]["sequence"][599] == "V"
     assert proteins["KRAS"]["sequence"][11] == "G"
     assert proteins["TP53"]["sequence"][174] == "R"

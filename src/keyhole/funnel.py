@@ -310,16 +310,3 @@ def run_funnel(
         reason_codes=reasons,
         plain_language=language,
     )
-
-
-def run_funnel_many(
-    pairs: Sequence[PeptidePair],
-    alleles: Sequence[str],
-    *,
-    binder: FrozenBinder | None = None,
-) -> tuple[FunnelResult, ...]:
-    """Run candidates in stable order while reusing one binder and self index."""
-
-    model = load_binder() if binder is None else binder
-    index = _self_index()
-    return tuple(run_funnel(pair, alleles, binder=model, self_index=index) for pair in pairs)

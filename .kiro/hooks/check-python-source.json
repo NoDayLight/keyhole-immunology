@@ -4,11 +4,11 @@
     {
       "name": "Check Python source changes",
       "trigger": "PostToolUse",
-      "description": "Runs ruff and fail-fast pytest whenever a tool changes Python source.",
-      "matcher": "fs_write|fs_append|str_replace|semantic_rename|smart_relocate",
+      "description": "Runs Ruff and fail-fast pytest whenever a current Kiro mutation tool changes Python source or tests, while preserving the PostToolUse JSON payload on stdin.",
+      "matcher": "fs_write|fs_append|str_replace|semantic_rename|smart_relocate|delete_file|createHook",
       "action": {
         "type": "command",
-        "command": ".venv/bin/python - <<'PY'\nimport json, subprocess, sys\npayload=json.load(sys.stdin)\ntext=json.dumps(payload)\nif 'src/' in text or 'src\\\\/' in text:\n    a=subprocess.run(['.venv/bin/ruff','check','src','tests'])\n    b=subprocess.run(['.venv/bin/pytest','-x','-q'])\n    raise SystemExit(a.returncode or b.returncode)\nPY",
+        "command": ".venv/bin/python -c 'import json, subprocess, sys; payload = json.load(sys.stdin); text = json.dumps(payload); changed = any(marker in text for marker in (\"src/\", \"src\\\\/\", \"tests/\", \"tests\\\\/\")); ruff = subprocess.run([\".venv/bin/ruff\", \"check\", \"src\", \"tests\"]).returncode if changed else 0; tests = subprocess.run([\".venv/bin/pytest\", \"-x\", \"-q\"]).returncode if changed else 0; sys.exit(ruff or tests)'",
         "timeout": 120
       }
     }
