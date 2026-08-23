@@ -41,3 +41,10 @@ Decisions are append-only and identify the spec boundary that introduced them.
 - Cleavage and TAP coefficient tables are transparent hand-authored approximations motivated by cited pathway literature, not fitted measurements or reproductions of proprietary predictors.
 - Foreignness is a normalized BLOSUM62 distance to the closest peptide in the frozen 500,000-peptide self sample. This is a simplified adaptation of sequence-similarity reasoning associated with Łuksza et al. (Nature 2017), not their published fitness model.
 - A frameshift candidate without a complete position-matched wild-type peptide receives agretopicity `0.0` only as a schema-v1 non-comparable sentinel and carries `NO_WT_COUNTERPART`; the report renders it as unavailable, not as measured zero.
+
+## S4 — 2026-08-24 — Population coverage from unphased marginals
+
+- Coverage uses the real frozen AFR/AMR/EAS/EUR marginal HLA-A/B frequencies. SAS remains absent because the source panel contains no SAS observations; no frequencies are fabricated or imputed.
+- The source has no phased A–B haplotypes. Seeded Monte Carlo therefore draws A and B independently under an explicit linkage-equilibrium assumption and draws two chromosome copies under Hardy-Weinberg; all resulting coverage is labeled `heuristic approximation`, never measured haplotype coverage.
+- The peptide×allele matrix retains per-allele S2 IC50/rank evidence plus the S3 heuristic verdict so the browser only renders serialized results and never recomputes population science.
+- `ALL_OBSERVED` is weighted by source cohort counts and is deliberately not called worldwide or global demographic coverage.
