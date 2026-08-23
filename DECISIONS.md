@@ -56,3 +56,11 @@ Decisions are append-only and identify the spec boundary that introduced them.
 - Each positive receives a seed-1729, length- and amino-acid-composition-preserving shuffled control. These are labeled synthetic decoys with no experimental assay result, so their rejection and ROC AUC are not called specificity or clinical validation.
 - Agreement compares heuristic KEYHOLE visibility with published T-cell positivity, which are different endpoints. Per-entry binder-source overlap and global peptide split are disclosed because the panel is not an independent clinical validation set.
 - On the real frozen panel, 8/9 evaluable positives were visible, 8/9 evaluable synthetic decoys were rejected, all 9 positives had a better binding percentile rank than their paired decoy, and synthetic-decoy binding ROC AUC was 0.987654.
+
+## S6 — 2026-08-24 — Truthful offline molecular scenes
+
+- Experimental scenes parse and rotate untouched frozen PDB coordinates. Their persistent labels are exactly `Real crystal structure (PDB id)`; 1HHK/3PWN display one A/B/C pMHC assembly, while only verified TCR complex 1AO7 displays A/B/C/D/E.
+- 3PWN's TCR-related keywords do not make it a TCR coordinate structure. Its 164 nonblank alternate-location records represent 82 duplicated atom sites; blank locations are preferred and otherwise one highest-occupancy conformer is selected with deterministic lexical tie-breaking.
+- Candidate peptides use deterministic residue beads and sequential links, not fabricated all-atom chemistry or docking. They are persistently labeled `Schematic — data real, geometry illustrative` and explicitly described as neither measured, structure-predicted, nor HLA-docked.
+- A small local canvas projection engine was implemented instead of adding a third-party dependency, CDN, or Node toolchain. The misleading scaffold name `three.min.js` was removed; browser code remains plain local IIFEs for S7 to inline.
+- The reduced-detail SVG Cα/peptide view is always generated alongside canvas, with title, description, chain legend, text truth label, keyboard controls, and live fallback status.
