@@ -4,6 +4,11 @@
 
   var REAL_PREFIX = "Real crystal structure (PDB ";
   var SCHEMATIC = "Schematic — data real, geometry illustrative";
+  var IDLE_DELAY_MS = 3000;
+  var AUTO_ROTATE_RADIANS_PER_MS = 0.00008;
+  var INERTIA_DECAY_PER_FRAME = 0.92;
+  var RESET_DURATION_MS = 460;
+  var VISUAL_RADII = { H: 0.31, C: 0.76, N: 0.71, O: 0.66, S: 1.05, P: 1.07, HG: 1.32 };
   var ROLE_COLORS = {
     "HLA heavy chain": "#287d8e",
     "β2-microglobulin": "#4d67b0",
@@ -15,6 +20,7 @@
   var ELEMENT_COLORS = {
     C: "#718096", N: "#3157a4", O: "#b43c4b", S: "#c58b16", P: "#8a4fa3", HG: "#6f7780"
   };
+  var gradientCache = new Map();
 
   function escapeXml(value) {
     return String(value).replace(/[&<>"']/g, function (character) {
@@ -28,6 +34,30 @@
     return SCHEMATIC;
   }
 
+  function resolveBondPairs(atoms, bonds) {
+    var indexBySerial = new Map();
+    atoms.forEach(function (atom, index) { indexBySerial.set(atom.serial, index); });
+    return bonds.reduce(function (pairs, bond) {
+      var fromIndex = indexBySerial.get(bond.from);
+      var toIndex = indexBySerial.get(bond.to);
+      if (fromIndex !== undefined && toIndex !== undefined && fromIndex !== toIndex) {
+        pairs.push({ fromIndex: fromIndex, toIndex: toIndex });
+      }
+      return pairs;
+    }, []);
+  }
+
+  function preparedScene(atoms, bonds, chainRoles, stats, source) {
+    return {
+      atoms: atoms,
+      bonds: bonds,
+      bondPairs: resolveBondPairs(atoms, bonds),
+      chainRoles: chainRoles,
+      stats: stats,
+      source: source
+    };
+  }
+
   function prepare(data) {
     if (!data || (data.kind !== "pdb" && data.kind !== "schematic")) {
       throw new Error("scene payload must be pdb or schematic");
@@ -36,13 +66,16 @@
       var schematicAtoms = data.atoms.map(function (atom) {
         return Object.assign({}, atom, { serial: atom.id, record: "ATOM", occupancy: 1 });
       });
-      return {
-        atoms: schematicAtoms,
-        bonds: data.bonds.map(function (bond) { return { from: bond[0], to: bond[1] }; }),
-        chainRoles: data.chain_roles || { C: "candidate peptide schematic" },
-        stats: { selectedAtomSites: schematicAtoms.length },
-        source: null
-      };
+      var schematicBonds = data.bonds.map(function (bond) {
+        return { from: bond[0], to: bond[1] };
+      });
+      return preparedScene(
+        schematicAtoms,
+        schematicBonds,
+        data.chain_roles || { C: "candidate peptide schematic" },
+        { selectedAtomSites: schematicAtoms.length },
+        null
+      );
     }
     var parsed = global.KEYHOLE.pdb.parse(data.pdb_text);
     var displayChains = new Set(data.display_chains || Object.keys(parsed.chains));
@@ -51,15 +84,10 @@
         atom.element !== "H" && atom.occupancy > 0;
     });
     var serials = new Set(atoms.map(function (atom) { return atom.serial; }));
-    return {
-      atoms: atoms,
-      bonds: parsed.bonds.filter(function (bond) {
-        return serials.has(bond.from) && serials.has(bond.to);
-      }),
-      chainRoles: data.chain_roles || {},
-      stats: parsed.stats,
-      source: parsed
-    };
+    var bonds = parsed.bonds.filter(function (bond) {
+      return serials.has(bond.from) && serials.has(bond.to);
+    });
+    return preparedScene(atoms, bonds, data.chain_roles || {}, parsed.stats, parsed);
   }
 
   function atomColor(atom, chainRoles) {
@@ -69,41 +97,109 @@
     return ELEMENT_COLORS[atom.element] || "#68717d";
   }
 
-  function projectedMap(prepared, view, width, height) {
-    var points = global.KEYHOLEProjection.project(prepared.atoms, view, width, height);
-    var bySerial = new Map();
-    points.forEach(function (point) { bySerial.set(point.atom.serial, point); });
-    return { points: points, bySerial: bySerial };
+  function visualRadius(atom) {
+    var elementRadius = VISUAL_RADII[atom.element] || VISUAL_RADII.C;
+    var roleScale = atom.role ? 1.85 : 1;
+    return 2.25 * elementRadius / VISUAL_RADII.C * roleScale;
+  }
+
+  function sphereSprite(color) {
+    if (gradientCache.has(color)) { return gradientCache.get(color); }
+    var sprite = document.createElement("canvas");
+    sprite.width = 64;
+    sprite.height = 64;
+    var context = sprite.getContext("2d");
+    if (!context) { return null; }
+    var gradient = context.createRadialGradient(21, 18, 2, 32, 32, 30);
+    gradient.addColorStop(0, "rgba(255,255,255,0.95)");
+    gradient.addColorStop(0.2, color);
+    gradient.addColorStop(0.72, color);
+    gradient.addColorStop(1, "rgba(0,0,0,0.72)");
+    context.fillStyle = gradient;
+    context.beginPath();
+    context.arc(32, 32, 30, 0, Math.PI * 2);
+    context.fill();
+    gradientCache.set(color, sprite);
+    return sprite;
+  }
+
+  function depthCues(points) {
+    var minimum = Infinity;
+    var maximum = -Infinity;
+    points.forEach(function (point) {
+      minimum = Math.min(minimum, point.z);
+      maximum = Math.max(maximum, point.z);
+    });
+    var span = Math.max(0.000001, maximum - minimum);
+    return points.map(function (point) {
+      var painterZ = 1 - (point.z - minimum) / span;
+      return {
+        alpha: 0.5 + painterZ * 0.5,
+        radius: 0.82 + painterZ * 0.28,
+        painterZ: painterZ
+      };
+    });
+  }
+
+  function drawBackdrop(context, width, height) {
+    var radius = Math.max(width, height) * 0.72;
+    var backdrop = context.createRadialGradient(
+      width * 0.5, height * 0.45, 8,
+      width * 0.5, height * 0.45, radius
+    );
+    backdrop.addColorStop(0, "#173047");
+    backdrop.addColorStop(0.48, "#0c1d2c");
+    backdrop.addColorStop(1, "#050d15");
+    context.fillStyle = backdrop;
+    context.fillRect(0, 0, width, height);
   }
 
   function drawCanvas(context, prepared, view, width, height) {
-    var projection = projectedMap(prepared, view, width, height);
+    var points = global.KEYHOLEProjection.project(prepared.atoms, view, width, height);
+    var cues = depthCues(points);
     context.clearRect(0, 0, width, height);
-    context.fillStyle = "#08131e";
-    context.fillRect(0, 0, width, height);
+    drawBackdrop(context, width, height);
     context.lineCap = "round";
-    prepared.bonds.forEach(function (bond) {
-      var from = projection.bySerial.get(bond.from);
-      var to = projection.bySerial.get(bond.to);
-      if (!from || !to) { return; }
-      context.strokeStyle = "rgba(202, 217, 230, 0.42)";
-      context.lineWidth = Math.max(0.65, 1.15 * (from.scale + to.scale) / 2);
+    prepared.bondPairs.forEach(function (pair) {
+      var from = points[pair.fromIndex];
+      var to = points[pair.toIndex];
+      var cue = (cues[pair.fromIndex].painterZ + cues[pair.toIndex].painterZ) / 2;
+      context.strokeStyle = "rgba(202,217,230," + (0.18 + cue * 0.34).toFixed(3) + ")";
+      context.lineWidth = Math.max(0.55, (0.75 + cue * 0.8) * (from.scale + to.scale) / 2);
       context.beginPath();
       context.moveTo(from.x, from.y);
       context.lineTo(to.x, to.y);
       context.stroke();
     });
-    projection.points.sort(function (left, right) { return left.z - right.z; });
-    projection.points.forEach(function (point) {
-      var radius = Math.max(1.2, (point.atom.role ? 5.2 : 2.15) * point.scale);
-      context.fillStyle = atomColor(point.atom, prepared.chainRoles);
-      context.beginPath();
-      context.arc(point.x, point.y, radius, 0, Math.PI * 2);
-      context.fill();
+
+    var painterPoints = points.map(function (point, index) {
+      return { point: point, cue: cues[index] };
+    }).sort(function (left, right) { return right.point.z - left.point.z; });
+
+    painterPoints.forEach(function (entry) {
+      var point = entry.point;
+      var cue = entry.cue;
+      var radius = Math.max(1.15, visualRadius(point.atom) * point.scale * cue.radius);
+      var color = atomColor(point.atom, prepared.chainRoles);
+      var sprite = sphereSprite(color);
+      context.globalAlpha = cue.alpha;
+      if (sprite) {
+        context.drawImage(sprite, point.x - radius, point.y - radius, radius * 2, radius * 2);
+      } else {
+        context.fillStyle = color;
+        context.beginPath();
+        context.arc(point.x, point.y, radius, 0, Math.PI * 2);
+        context.fill();
+      }
+      context.globalAlpha = 1;
       if (point.atom.role === "mutation") {
-        context.strokeStyle = "#fff2a8";
-        context.lineWidth = 2;
-        context.stroke();
+        [1.5, 2.05].forEach(function (ringScale, index) {
+          context.strokeStyle = index === 0 ? "rgba(255,242,168,0.92)" : "rgba(208,47,68,0.48)";
+          context.lineWidth = index === 0 ? 1.7 : 1.15;
+          context.beginPath();
+          context.arc(point.x, point.y, radius * ringScale, 0, Math.PI * 2);
+          context.stroke();
+        });
       }
     });
   }
@@ -118,26 +214,29 @@
   }
 
   function renderSvg(prepared, view, width, height, label) {
-    var reduced = Object.assign({}, prepared, { atoms: fallbackAtoms(prepared) });
-    var projection = projectedMap(reduced, view, width, height);
+    var atoms = fallbackAtoms(prepared);
+    var points = global.KEYHOLEProjection.project(atoms, view, width, height);
     var traces = new Map();
-    projection.points.forEach(function (point) {
+    points.forEach(function (point) {
       var role = prepared.chainRoles[point.atom.chain] || point.atom.chain;
       if (!traces.has(role)) { traces.set(role, []); }
       traces.get(role).push(point);
     });
     var body = [];
-    traces.forEach(function (points, role) {
-      points.sort(function (left, right) { return left.atom.serial - right.atom.serial; });
-      if (points.length > 1) {
+    traces.forEach(function (tracePoints, role) {
+      tracePoints.sort(function (left, right) { return left.atom.serial - right.atom.serial; });
+      if (tracePoints.length > 1) {
         body.push('<polyline fill="none" stroke="' +
           escapeXml(ROLE_COLORS[role] || "#81909f") + '" stroke-width="2.4" points="' +
-          points.map(function (point) { return point.x.toFixed(1) + "," + point.y.toFixed(1); }).join(" ") + '"/>');
+          tracePoints.map(function (point) {
+            return point.x.toFixed(1) + "," + point.y.toFixed(1);
+          }).join(" ") + '"/>');
       }
-      points.forEach(function (point) {
+      tracePoints.forEach(function (point) {
         var radius = point.atom.role ? 5 : 2.4;
         body.push('<circle cx="' + point.x.toFixed(1) + '" cy="' + point.y.toFixed(1) +
-          '" r="' + radius + '" fill="' + escapeXml(atomColor(point.atom, prepared.chainRoles)) + '"/>');
+          '" r="' + radius + '" fill="' +
+          escapeXml(atomColor(point.atom, prepared.chainRoles)) + '"/>');
       });
     });
     return '<svg class="keyhole-scene-svg" viewBox="0 0 ' + width + " " + height +
@@ -154,7 +253,8 @@
       items.push("Chain " + chain + ": " + role);
     });
     if (data.kind === "pdb" && prepared.source) {
-      items.push(prepared.source.stats.selectedAtomSites + " selected atom sites; rendered view omits water, zero-occupancy atoms, and non-display chains");
+      items.push(prepared.source.stats.selectedAtomSites +
+        " selected atom sites; rendered view omits water, zero-occupancy atoms, and non-display chains");
     }
     return items;
   }
@@ -170,7 +270,25 @@
     var listeners = [];
     var destroyed = false;
     var dragging = false;
-    var pointer = { x: 0, y: 0 };
+    var pointer = { x: 0, y: 0, time: 0 };
+    var velocity = { yaw: 0, pitch: 0 };
+    var resetTween = null;
+    var frameId = 0;
+    var lastFrame = 0;
+    var lastInteraction = 0;
+    var canvasDirty = true;
+    var svgDirty = true;
+    var svgSizeKey = "";
+    var visible = true;
+
+    var motionQuery = global.matchMedia ?
+      global.matchMedia("(prefers-reduced-motion: reduce)") : null;
+    var reducedMotion = Boolean(motionQuery && motionQuery.matches);
+
+    function now() {
+      return global.performance && global.performance.now ? global.performance.now() : Date.now();
+    }
+    lastInteraction = now();
 
     var wrapper = document.createElement("section");
     wrapper.className = "keyhole-scene";
@@ -186,7 +304,8 @@
     var detail = document.createElement("p");
     detail.className = "scene-detail";
     detail.textContent = data.kind === "pdb" ?
-      [data.method, data.resolution_angstrom ? data.resolution_angstrom + " Å" : "", data.citation].filter(Boolean).join(" · ") :
+      [data.method, data.resolution_angstrom ? data.resolution_angstrom + " Å" : "", data.citation]
+        .filter(Boolean).join(" · ") :
       String(data.geometry || "Illustrative residue layout; not a measured or predicted pose.");
     wrapper.appendChild(detail);
 
@@ -240,29 +359,138 @@
       var height = Math.max(280, Math.min(560, Math.round(width * 0.62)));
       return { width: width, height: height };
     }
-    function render() {
-      if (destroyed) { return; }
-      var size = dimensions();
-      svgHost.innerHTML = renderSvg(prepared, view, size.width, size.height, label);
-      if (!context) { return; }
+
+    function sizeCanvas(size) {
       var ratio = Math.min(2, global.devicePixelRatio || 1);
-      canvas.width = Math.round(size.width * ratio);
-      canvas.height = Math.round(size.height * ratio);
-      canvas.style.width = size.width + "px";
-      canvas.style.height = size.height + "px";
+      var pixelWidth = Math.round(size.width * ratio);
+      var pixelHeight = Math.round(size.height * ratio);
+      if (canvas.width !== pixelWidth) { canvas.width = pixelWidth; }
+      if (canvas.height !== pixelHeight) { canvas.height = pixelHeight; }
+      if (canvas.style.width !== size.width + "px") { canvas.style.width = size.width + "px"; }
+      if (canvas.style.height !== size.height + "px") { canvas.style.height = size.height + "px"; }
       context.setTransform(ratio, 0, 0, ratio, 0, 0);
-      drawCanvas(context, prepared, view, size.width, size.height);
     }
+
+    function drawFrame() {
+      if (destroyed || !context || !visible) { return; }
+      var size = dimensions();
+      sizeCanvas(size);
+      drawCanvas(context, prepared, view, size.width, size.height);
+      canvasDirty = false;
+    }
+
+    function refreshSvg(force) {
+      if (destroyed || !fallback.open) { return; }
+      var size = dimensions();
+      var sizeKey = size.width + "x" + size.height;
+      if (!force && !svgDirty && svgSizeKey === sizeKey) { return; }
+      svgHost.innerHTML = renderSvg(prepared, view, size.width, size.height, label);
+      svgSizeKey = sizeKey;
+      svgDirty = false;
+    }
+
+    function cancelLoop() {
+      if (frameId) {
+        global.cancelAnimationFrame(frameId);
+        frameId = 0;
+      }
+      lastFrame = 0;
+    }
+
+    function ensureLoop() {
+      if (!frameId && !destroyed && context && visible && !reducedMotion) {
+        frameId = global.requestAnimationFrame(tick);
+      }
+    }
+
+    function requestCanvas() {
+      canvasDirty = true;
+      svgDirty = true;
+      if (reducedMotion) { drawFrame(); }
+      else { ensureLoop(); }
+    }
+
+    function finishAnimatedView() {
+      if (fallback.open && svgDirty) { refreshSvg(false); }
+    }
+
+    function tick(timestamp) {
+      frameId = 0;
+      if (destroyed || reducedMotion || !visible || !context) { return; }
+      var elapsed = lastFrame ? Math.min(40, timestamp - lastFrame) : 16;
+      lastFrame = timestamp;
+      var animated = false;
+
+      if (resetTween) {
+        if (resetTween.started === null) { resetTween.started = timestamp; }
+        var progress = Math.min(1, (timestamp - resetTween.started) / RESET_DURATION_MS);
+        var eased = 1 - Math.pow(1 - progress, 3);
+        view.yaw = resetTween.from.yaw + (initial.yaw - resetTween.from.yaw) * eased;
+        view.pitch = resetTween.from.pitch + (initial.pitch - resetTween.from.pitch) * eased;
+        view.zoom = resetTween.from.zoom + (initial.zoom - resetTween.from.zoom) * eased;
+        animated = true;
+        canvasDirty = true;
+        svgDirty = true;
+        if (progress === 1) {
+          resetTween = null;
+          status.textContent = "Molecular scene reset.";
+          finishAnimatedView();
+        }
+      } else if (!dragging && (Math.abs(velocity.yaw) > 0.00001 || Math.abs(velocity.pitch) > 0.00001)) {
+        view.yaw += velocity.yaw * elapsed;
+        view.pitch = global.KEYHOLEProjection.clamp(
+          view.pitch + velocity.pitch * elapsed, -Math.PI / 2, Math.PI / 2
+        );
+        var decay = Math.pow(INERTIA_DECAY_PER_FRAME, elapsed / 16);
+        velocity.yaw *= decay;
+        velocity.pitch *= decay;
+        if (Math.abs(velocity.yaw) <= 0.00001 && Math.abs(velocity.pitch) <= 0.00001) {
+          velocity = { yaw: 0, pitch: 0 };
+          finishAnimatedView();
+        }
+        animated = true;
+        canvasDirty = true;
+        svgDirty = true;
+      } else if (!dragging && timestamp - lastInteraction > IDLE_DELAY_MS) {
+        view.yaw += AUTO_ROTATE_RADIANS_PER_MS * elapsed;
+        animated = true;
+        canvasDirty = true;
+        svgDirty = true;
+      }
+
+      if (canvasDirty || animated) { drawFrame(); }
+      ensureLoop();
+    }
+
     function listen(target, type, handler, options) {
       target.addEventListener(type, handler, options);
       listeners.push(function () { target.removeEventListener(type, handler, options); });
     }
+
+    function interact() {
+      lastInteraction = now();
+      resetTween = null;
+    }
+
     function restore() {
-      view.yaw = initial.yaw;
-      view.pitch = initial.pitch;
-      view.zoom = initial.zoom;
-      status.textContent = "Molecular scene reset.";
-      render();
+      interact();
+      velocity = { yaw: 0, pitch: 0 };
+      if (reducedMotion || !context) {
+        view.yaw = initial.yaw;
+        view.pitch = initial.pitch;
+        view.zoom = initial.zoom;
+        status.textContent = "Molecular scene reset.";
+        requestCanvas();
+        refreshSvg(false);
+        return;
+      }
+      resetTween = {
+        started: null,
+        pausedAt: null,
+        from: { yaw: view.yaw, pitch: view.pitch, zoom: view.zoom }
+      };
+      status.textContent = "Resetting molecular scene.";
+      requestCanvas();
     }
 
     try {
@@ -275,29 +503,53 @@
     }
 
     listen(canvas, "pointerdown", function (event) {
+      interact();
       dragging = true;
-      pointer = { x: event.clientX, y: event.clientY };
+      velocity = { yaw: 0, pitch: 0 };
+      pointer = { x: event.clientX, y: event.clientY, time: now() };
       if (canvas.setPointerCapture) { canvas.setPointerCapture(event.pointerId); }
+      ensureLoop();
     });
     listen(canvas, "pointermove", function (event) {
       if (!dragging) { return; }
-      view.yaw += (event.clientX - pointer.x) * 0.008;
+      var currentTime = now();
+      var elapsed = Math.max(8, currentTime - pointer.time);
+      var deltaX = event.clientX - pointer.x;
+      var deltaY = event.clientY - pointer.y;
+      view.yaw += deltaX * 0.008;
       view.pitch = global.KEYHOLEProjection.clamp(
-        view.pitch + (event.clientY - pointer.y) * 0.008,
-        -Math.PI / 2,
-        Math.PI / 2
+        view.pitch + deltaY * 0.008, -Math.PI / 2, Math.PI / 2
       );
-      pointer = { x: event.clientX, y: event.clientY };
-      render();
+      velocity = {
+        yaw: deltaX * 0.008 / elapsed,
+        pitch: deltaY * 0.008 / elapsed
+      };
+      pointer = { x: event.clientX, y: event.clientY, time: currentTime };
+      lastInteraction = currentTime;
+      requestCanvas();
     });
-    listen(canvas, "pointerup", function () { dragging = false; });
-    listen(canvas, "pointercancel", function () { dragging = false; });
+    function endDrag() {
+      if (!dragging) { return; }
+      dragging = false;
+      lastInteraction = now();
+      if (reducedMotion) { velocity = { yaw: 0, pitch: 0 }; }
+      refreshSvg(false);
+      ensureLoop();
+    }
+    listen(canvas, "pointerup", endDrag);
+    listen(canvas, "pointercancel", function () {
+      velocity = { yaw: 0, pitch: 0 };
+      endDrag();
+    });
     listen(canvas, "wheel", function (event) {
       event.preventDefault();
+      interact();
+      velocity = { yaw: 0, pitch: 0 };
       view.zoom = global.KEYHOLEProjection.clamp(
         view.zoom * Math.exp(-event.deltaY * 0.001), 0.35, 4.5
       );
-      render();
+      requestCanvas();
+      refreshSvg(false);
     }, { passive: false });
     listen(wrapper, "keydown", function (event) {
       var handled = true;
@@ -311,25 +563,95 @@
       else { handled = false; }
       if (handled) {
         event.preventDefault();
+        interact();
+        velocity = { yaw: 0, pitch: 0 };
         view.zoom = global.KEYHOLEProjection.clamp(view.zoom, 0.35, 4.5);
         view.pitch = global.KEYHOLEProjection.clamp(view.pitch, -Math.PI / 2, Math.PI / 2);
-        render();
+        requestCanvas();
+        refreshSvg(false);
       }
     });
     listen(reset, "click", restore);
+    listen(fallback, "toggle", function () {
+      if (fallback.open) { refreshSvg(true); }
+    });
 
-    var observer = null;
+    var resizeObserver = null;
     if (global.ResizeObserver) {
-      observer = new global.ResizeObserver(render);
-      observer.observe(wrapper);
+      resizeObserver = new global.ResizeObserver(function () {
+        requestCanvas();
+        refreshSvg(false);
+      });
+      resizeObserver.observe(wrapper);
     } else {
-      listen(global, "resize", render);
+      listen(global, "resize", function () {
+        requestCanvas();
+        refreshSvg(false);
+      });
     }
-    render();
+
+    var intersectionObserver = null;
+    if (global.IntersectionObserver) {
+      intersectionObserver = new global.IntersectionObserver(function (entries) {
+        entries.forEach(function (entry) {
+          if (entry.target !== wrapper) { return; }
+          visible = entry.isIntersecting && entry.intersectionRatio > 0;
+          if (visible) {
+            if (resetTween && resetTween.started !== null && resetTween.pausedAt !== null) {
+              resetTween.started += now() - resetTween.pausedAt;
+              resetTween.pausedAt = null;
+            }
+            canvasDirty = true;
+            drawFrame();
+            ensureLoop();
+          } else {
+            if (resetTween && resetTween.started !== null && resetTween.pausedAt === null) {
+              resetTween.pausedAt = now();
+            }
+            cancelLoop();
+          }
+        });
+      });
+      intersectionObserver.observe(wrapper);
+    }
+
+    function motionChanged(event) {
+      reducedMotion = event.matches;
+      velocity = { yaw: 0, pitch: 0 };
+      if (reducedMotion) {
+        if (resetTween) {
+          view.yaw = initial.yaw;
+          view.pitch = initial.pitch;
+          view.zoom = initial.zoom;
+          status.textContent = "Molecular scene reset.";
+          canvasDirty = true;
+          svgDirty = true;
+        }
+        resetTween = null;
+        cancelLoop();
+        drawFrame();
+        refreshSvg(false);
+      } else {
+        resetTween = null;
+        lastInteraction = now();
+        ensureLoop();
+      }
+    }
+    if (motionQuery) {
+      if (motionQuery.addEventListener) { motionQuery.addEventListener("change", motionChanged); }
+      else if (motionQuery.addListener) { motionQuery.addListener(motionChanged); }
+    }
+
+    drawFrame();
+    refreshSvg(true);
+    ensureLoop();
 
     return {
       reset: restore,
-      resize: render,
+      resize: function () {
+        requestCanvas();
+        refreshSvg(false);
+      },
       renderSvg: function () {
         var size = dimensions();
         return renderSvg(prepared, view, size.width, size.height, label);
@@ -337,8 +659,17 @@
       destroy: function () {
         if (destroyed) { return; }
         destroyed = true;
+        cancelLoop();
         listeners.splice(0).forEach(function (remove) { remove(); });
-        if (observer) { observer.disconnect(); }
+        if (resizeObserver) { resizeObserver.disconnect(); }
+        if (intersectionObserver) { intersectionObserver.disconnect(); }
+        if (motionQuery) {
+          if (motionQuery.removeEventListener) {
+            motionQuery.removeEventListener("change", motionChanged);
+          } else if (motionQuery.removeListener) {
+            motionQuery.removeListener(motionChanged);
+          }
+        }
         wrapper.remove();
       }
     };

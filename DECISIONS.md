@@ -96,3 +96,11 @@ Decisions are append-only and identify the spec boundary that introduced them.
 - Only confirmed zero-caller APIs were removed. `funnel.run_funnel` and `BindingPrediction.ic50`/`.rank` remain for planned contract delegation and compatibility.
 - The unused CCD ideal-coordinate JSON, its loader/test/package pattern, and unreferenced top-level RCSB metadata were removed. Historical `SOURCES.md` provenance and hashes remain unchanged rather than being rewritten; this entry records that those acquisition artifacts are no longer in the runtime closure.
 - Empty top-level acquisition scaffolds were removed from the working tree. R0 remains green at 58 tests with clean Ruff and diff checks; no binder artifact, metric, published README metric, or scientific output changed.
+
+## R1 — 2026-08-24 — Molecular render quality without scientific change
+
+- All runtime implementation changes are confined to `scene.js`; the schema, Python science, parsed coordinates, PDB resources, and `results.json` contract are unchanged.
+- The renderer copies the parser’s reviewed radius values locally for visual sizing, pre-resolves bond serials to atom indices once, projects atoms once per canvas draw, and uses painter-correct depth opacity/radius plus cached per-color radial-gradient sprites, a radial backdrop, and static concentric mutation rings.
+- Canvas backing dimensions change only when required. Pointer drag schedules canvas work without constructing SVG; the accessible fallback is generated when opened, on an open size change, or immediately after canvas failure.
+- One per-scene requestAnimationFrame loop owns idle rotation after three seconds, decaying drag inertia, and reset tweening. IntersectionObserver pauses time-based reset progress off-screen. Reduced-motion mode schedules no animation and snaps an in-progress reset to a truthful completed state.
+- The fixed-epoch SKCM `results.json` remained byte-identical before and after R1 at SHA-256 `8a16e6e9e0b04ce1537edb46b7ebe54cf76f7b5a5dd5a9ae6529579b86452b53`. Report bytes changed intentionally because this spec changes visuals. R1 closes with 59 tests, clean Ruff, valid JavaScript syntax, and a clean diff check.
