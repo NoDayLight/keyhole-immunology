@@ -112,3 +112,12 @@ Decisions are append-only and identify the spec boundary that introduced them.
 - Every candidate scene now bears exactly `Real backbone (PDB 1HHK) · mutated side chain ideal geometry — illustrative`. Report detail and README distinguish measured template coordinates from candidate identity, 10-mer interpolation, and idealized side-chain placement; no candidate docking or structure prediction is claimed.
 - R2 changes report scene payload only. The schema and fixed-epoch SKCM `results.json` remained byte-identical at SHA-256 `8a16e6e9e0b04ce1537edb46b7ebe54cf76f7b5a5dd5a9ae6529579b86452b53`; the visual HTML changed intentionally and remained within the existing envelope at 2,669,214 bytes.
 - R2 closes with all 59 tests passing, clean Ruff, valid JavaScript syntax, and a clean diff check. No binder artifact, metric, frozen provenance hash, or published README metric changed.
+
+## R3 — 2026-08-24 — Seeded candidate witness funnel
+
+- The funnel creates exactly one canvas particle per serialized mutation/peptide and derives lane, delay, speed, and size from `results.meta.seed`, `candidate_key`, and stable integer mixing; it never calls `Math.random` or invents candidates.
+- The canvas path is persistently labeled `Schematic — data real, geometry illustrative`. Proteasome, TAP, HLA keyhole, and self-scan carry their existing heuristic/measured-ML labels. Particle timing/path is illustrative; tooltips, counts, scores, verdicts, and reasons are serialized report evidence.
+- Rejection gates are chosen only from serialized `LOW_CLEAVAGE`, `LOW_TAP_TRANSPORT`, `WEAK_BINDING`, and `SELF_LIKE` reason codes. JavaScript does not reapply thresholds. Rejections flash and complete a reason-colored fall, including the final self-scan tail.
+- Replay resets the same seeded state. Hover hit testing is revalidated every animation frame so evidence cannot remain attached to a particle that has moved away. A single idempotent teardown covers initialization, selection, replay, animation, resize, media-change failures, and normal destroy.
+- Reduced-motion or unavailable canvas schedules no animation and opens the retained five-stage `flowSvg`; the selected candidate’s sequence, verdict, plain language, binding grid, reasons, and R2 molecular scene remain available.
+- R3 changed browser/report bytes only. Fixed-epoch SKCM `results.json` remained byte-identical at SHA-256 `8a16e6e9e0b04ce1537edb46b7ebe54cf76f7b5a5dd5a9ae6529579b86452b53`. All 60 tests, Ruff, JavaScript syntax, and diff checks passed; offline forbidden-string checks remained unchanged.

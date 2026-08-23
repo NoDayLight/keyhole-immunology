@@ -68,3 +68,37 @@ def test_scene_render_quality_hot_paths_and_motion_contract() -> None:
     assert "if (resetTween)" in source and 'status.textContent = "Molecular scene reset."' in source
     assert "if (reducedMotion)" in source and "cancelLoop()" in source
     assert "var painterZ = 1 - (point.z - minimum) / span" in source
+
+
+def test_funnel_particles_are_seeded_serialized_and_fallback_safe() -> None:
+    source = (WEB / "funnel.js").read_text(encoding="utf-8")
+    assert "buildParticles(candidates, results.meta.seed)" in source
+    assert "item.peptide.candidate_key" in source
+    assert "Math.random" not in source
+    assert "candidates.push" in source and "mutation.peptides.forEach" in source
+    for stage in ("Proteasome gate", "TAP channel", "HLA keyhole", "Self-scan"):
+        assert stage in source
+    assert source.count('method: "heuristic approximation"') == 3
+    assert 'method: "measured ML"' in source
+    for reason in ("LOW_CLEAVAGE", "LOW_TAP_TRANSPORT", "WEAK_BINDING", "SELF_LIKE"):
+        assert reason in source
+    assert 'FUNNEL_TRUTH = "Schematic — data real, geometry illustrative"' in source
+    assert "Replay candidate flow" in source
+    assert "global.requestAnimationFrame(animationFrame)" in source
+    assert "global.cancelAnimationFrame(frameId)" in source
+    assert "tooltip.textContent = tooltipText(nearest.item)" in source
+    assert "if (hoverPoint) { updateTooltip(); }" in source
+    assert "local - rejectedAt" in source
+    assert "STAGES[particle.rejection.stage].progress + 0.18" in source
+    assert "item.mutation.gene" in source and "item.mutation.change" in source
+    assert "peptide.scores.cleavage" in source and "peptide.scores.tap" in source
+    assert "peptide.foreignness" in source and "peptide.reason_codes" in source
+    assert "flowSvg(peptide)" in source
+    assert "reduced-motion/no-canvas fallback" in source
+    assert 'global.matchMedia("(prefers-reduced-motion: reduce)")' in source
+    assert "fallbackMode = reducedMotion || !canvasAvailable" in source
+    assert 'removeEventListener("pointermove", pointerMove)' in source
+    assert 'removeEventListener("click", replayClicked)' in source
+    assert "function teardown()" in source and "function fail(error)" in source
+    assert "return { destroy: teardown }" in source
+    assert "try { update(); }" in source
