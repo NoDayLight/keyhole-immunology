@@ -188,3 +188,12 @@ Transformations used only Python 3 standard-library facilities (`csv`, `gzip`, `
 - The authoritative final evaluation has 9,133 held-out rows for Spearman and 9,132 ROC-evaluable rows, with one ROC-indeterminate row. Final pooled Spearman is `0.7376983698471881`, pooled ROC AUC is `0.9313744947688023`, macro Spearman is `0.6858724498021502`, and macro ROC AUC is `0.9209613910509277`.
 - The corrective final training/artifact run took `6.0464781248010695` seconds. It did not change model weights or calibration arrays; it updated metric interpretation and JSON provenance. This correction supersedes the earlier ROC values, JSON hashes, and final-run time immediately above.
 - **Authoritative SHA-256:** `model_card.json` `7e611aa70d24865a1d36bb826449460b67c38da0b66346a79304ceabeab02e7f`; `metrics.json` `a4fe1c69b13b08d0df33936a914785b0ae1af4449f900ee997928d034263d14a`.
+
+## S3 heuristic processing and foreignness references
+
+No new measured dataset is introduced in S3. Binding uses the frozen measured-data S2 models. All other stages are labeled `heuristic approximation` and use transparent coefficients in `src/keyhole/funnel.py`.
+
+- **Proteasomal context:** Holzhütter HG et al. *A general statistical model for the identification of antigenic oligopeptides.* J Mol Biol. 1999. PMID `10656797`; Peters B et al. *Modeling the MHC class I pathway by combining predictions of proteasomal cleavage, TAP transport and MHC class I binding.* J Immunol. 2005. PMID `15868101`.
+- **TAP context:** Peters B et al. *Identifying MHC class I epitopes by predicting the TAP transport efficiency of epitope precursors.* J Immunol. 2003;171:1741–1749.
+- **Similarity concept:** Łuksza M et al. *A neoantigen fitness model predicts tumour response to checkpoint blockade immunotherapy.* Nature. 2017;551:517–520. DOI `10.1038/nature24473`. KEYHOLE uses a simpler nearest-human-self BLOSUM62 distance and does not claim to reproduce that fitness model.
+- **BLOSUM62:** Henikoff S, Henikoff JG. PNAS. 1992. DOI `10.1073/pnas.89.22.10915`.

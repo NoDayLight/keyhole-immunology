@@ -34,3 +34,10 @@ Decisions are append-only and identify the spec boundary that introduced them.
 
 - A censored held-out row contributes to 500 nM ROC AUC only when its reported relation and boundary establish a true threshold side: `<` at or below 500 is positive, `>` at or above 500 is negative, and equality is classified from its reported value. Bounds that straddle the threshold are excluded from ROC only, rather than assigned an unsupported class.
 - One of 9,133 held-out rows (`B*46:01`, `<5000 nM`) is therefore ROC-indeterminate. The authoritative 9,132-row ROC values are pooled `0.9313744947688023` and macro `0.9209613910509277`; Spearman is unchanged because its documented censor-bound-as-value approximation still includes all 9,133 rows.
+
+## S3 — 2026-08-24 — Truth-labeled visibility funnel
+
+- Binding predictions are labeled `measured ML`; cleavage, TAP, agretopicity interpretation, nearest-self distance, and verdict thresholds are labeled `heuristic approximation` in code and report metadata.
+- Cleavage and TAP coefficient tables are transparent hand-authored approximations motivated by cited pathway literature, not fitted measurements or reproductions of proprietary predictors.
+- Foreignness is a normalized BLOSUM62 distance to the closest peptide in the frozen 500,000-peptide self sample. This is a simplified adaptation of sequence-similarity reasoning associated with Łuksza et al. (Nature 2017), not their published fitness model.
+- A frameshift candidate without a complete position-matched wild-type peptide receives agretopicity `0.0` only as a schema-v1 non-comparable sentinel and carries `NO_WT_COUNTERPART`; the report renders it as unavailable, not as measured zero.
