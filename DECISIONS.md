@@ -48,3 +48,11 @@ Decisions are append-only and identify the spec boundary that introduced them.
 - The source has no phased A–B haplotypes. Seeded Monte Carlo therefore draws A and B independently under an explicit linkage-equilibrium assumption and draws two chromosome copies under Hardy-Weinberg; all resulting coverage is labeled `heuristic approximation`, never measured haplotype coverage.
 - The peptide×allele matrix retains per-allele S2 IC50/rank evidence plus the S3 heuristic verdict so the browser only renders serialized results and never recomputes population science.
 - `ALL_OBSERVED` is weighted by source cohort counts and is deliberately not called worldwide or global demographic coverage.
+
+## S5 — 2026-08-24 — Published-positive agreement panel
+
+- The frozen panel contains ten real positive IEDB T-cell assays, but only nine are evaluable by S2: the real KRAS G12D/HLA-C*08:02 record is retained as `not_evaluable`, never substituted with an HLA-A/B allele, and excluded from all model-agreement denominators.
+- Literature peptides have no position-matched wild-type sequence. S3's internal zero sentinel is used only to invoke the existing verdict engine; serialized agretopicity is null and explicitly `not_comparable`.
+- Each positive receives a seed-1729, length- and amino-acid-composition-preserving shuffled control. These are labeled synthetic decoys with no experimental assay result, so their rejection and ROC AUC are not called specificity or clinical validation.
+- Agreement compares heuristic KEYHOLE visibility with published T-cell positivity, which are different endpoints. Per-entry binder-source overlap and global peptide split are disclosed because the panel is not an independent clinical validation set.
+- On the real frozen panel, 8/9 evaluable positives were visible, 8/9 evaluable synthetic decoys were rejected, all 9 positives had a better binding percentile rank than their paired decoy, and synthetic-decoy binding ROC AUC was 0.987654.
