@@ -64,3 +64,15 @@ Decisions are append-only and identify the spec boundary that introduced them.
 - Candidate peptides use deterministic residue beads and sequential links, not fabricated all-atom chemistry or docking. They are persistently labeled `Schematic — data real, geometry illustrative` and explicitly described as neither measured, structure-predicted, nor HLA-docked.
 - A small local canvas projection engine was implemented instead of adding a third-party dependency, CDN, or Node toolchain. The misleading scaffold name `three.min.js` was removed; browser code remains plain local IIFEs for S7 to inline.
 - The reduced-detail SVG Cα/peptide view is always generated alongside canvas, with title, description, chain legend, text truth label, keyboard controls, and live fallback status.
+
+## S7 — 2026-08-24 — Schema-first standalone report and CLI
+
+- Screening scores only variants with frozen canonical missense context. Unsupported input rows remain visible through independent raw, parsed, missing-context, frameshift, and ignored-class audit counts; no protein sequence or verdict is invented.
+- Mutant and matched wild-type peptides are batch-predicted once per each of all 26 frozen models. Patient verdicts use only supplied HLA alleles, while a separately computed 26-allele matrix supports population coverage and cannot alter patient conclusions.
+- The dataflow is one way: Python pipeline → validated schema-v1 results → render-only browser. Additive `candidate_key`, `best_allele`, and `protein_start` metadata do not alter the frozen required schema-v1 contract.
+- One report embeds validated JSON, untouched 1HHK/3PWN/1AO7 text, every candidate schematic, CSS, and all seven local IIFEs. CSP disables connections and default resource loading; no CDN, sidecar, server, credential, Node toolchain, or browser-side scientific recomputation is used.
+- Creation time is real UTC by default and honors `SOURCE_DATE_EPOCH` for reproducible builds. A false fixed historical timestamp was rejected.
+- The representative SKCM artifact is approximately 2.62 MB. Meaningless padding was rejected; the release guard accepts 2–6 MB because all legitimate required content is present and the requested 3–6 MB target was approximate.
+- The report boundary applies a stricter additive renderer contract on top of frozen schema v1: serialized best-HLA must match the exact rank/IC50/allele winner, patient binding keys must match supplied HLA, population keys and all 26 cells must align, and every literature field consumed by JavaScript is type-checked before HTML is emitted.
+- Parsed frameshifts are counted as unsupported independently from missing canonical context, so the same unresolved row may truthfully contribute to both audit categories; the PAAD example contains one such frameshift.
+- Browser-generated population SVG uses namespaced DOM nodes and text content rather than interpolated markup. Startup and lazy-scene teardown remove listeners, destroy mounted controllers, and roll back already-mounted modules on failure.
