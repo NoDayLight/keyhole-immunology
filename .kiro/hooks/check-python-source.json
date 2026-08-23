@@ -1,0 +1,16 @@
+{
+  "version": "v1",
+  "hooks": [
+    {
+      "name": "Check Python source changes",
+      "trigger": "PostToolUse",
+      "description": "Runs ruff and fail-fast pytest whenever a tool changes Python source.",
+      "matcher": "fs_write|fs_append|str_replace|semantic_rename|smart_relocate",
+      "action": {
+        "type": "command",
+        "command": ".venv/bin/python - <<'PY'\nimport json, subprocess, sys\npayload=json.load(sys.stdin)\ntext=json.dumps(payload)\nif 'src/' in text or 'src\\\\/' in text:\n    a=subprocess.run(['.venv/bin/ruff','check','src','tests'])\n    b=subprocess.run(['.venv/bin/pytest','-x','-q'])\n    raise SystemExit(a.returncode or b.returncode)\nPY",
+        "timeout": 120
+      }
+    }
+  ]
+}

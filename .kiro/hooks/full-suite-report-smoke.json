@@ -1,0 +1,15 @@
+{
+  "version": "v1",
+  "hooks": [
+    {
+      "name": "Full suite and report smoke",
+      "trigger": "Stop",
+      "description": "Runs the full suite plus an end-to-end offline report smoke test when an agent execution stops.",
+      "action": {
+        "type": "command",
+        "command": ".venv/bin/pytest -q && .venv/bin/keyhole validate --quick && .venv/bin/keyhole screen --maf data/examples/tcga_skcm.maf --hla 'A*02:01,B*07:02' --report /tmp/keyhole-smoke.html",
+        "timeout": 300
+      }
+    }
+  ]
+}
