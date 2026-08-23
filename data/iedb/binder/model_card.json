@@ -1,0 +1,113 @@
+{
+  "alleles": [
+    "A*01:01",
+    "A*02:01",
+    "A*03:01",
+    "A*11:01",
+    "A*23:01",
+    "A*24:02",
+    "A*29:02",
+    "A*30:01",
+    "A*30:02",
+    "A*31:01",
+    "A*33:01",
+    "A*68:01",
+    "B*07:02",
+    "B*08:01",
+    "B*15:01",
+    "B*18:01",
+    "B*27:05",
+    "B*35:01",
+    "B*40:01",
+    "B*44:02",
+    "B*44:03",
+    "B*46:01",
+    "B*51:01",
+    "B*53:01",
+    "B*57:01",
+    "B*58:01"
+  ],
+  "architecture": [
+    "Flatten(9x21)",
+    "Linear(189,128)",
+    "ReLU",
+    "Linear(128,64)",
+    "ReLU",
+    "Linear(64,1)"
+  ],
+  "artifact_sha256": {
+    "A_01_01.npz": "cf9d871b1355cb711d0c26e2b08220e57b057b43a81bc876f638ecfe2030da20",
+    "A_02_01.npz": "faa9b15ec074531a2696ba64790dd6358f4528a6b0774670253677880112f95c",
+    "A_03_01.npz": "633ad5ff630fd087df0994fa179ae8d8ad1c78838a23fa916950389333d72771",
+    "A_11_01.npz": "14070230d1ed3b9c22ae5671f637ef45341c6a1e13dd54e42713c92768d3501b",
+    "A_23_01.npz": "07ee3dd0457f675ec2c621c10b90b6fb208d45ef0a97fdacefaae710464699e9",
+    "A_24_02.npz": "97562ae0b4f6b6d5dac5971135f6b50876894cf961d9821411104fb5d514f16a",
+    "A_29_02.npz": "9391810c8e5959e042285191182d5d1f4d7682c22c5acd4a589210fc41e38bad",
+    "A_30_01.npz": "511c55a4eee81c1c49bcf63fe2b15e0b3daeecb38481a78780a86ffd2242bc3e",
+    "A_30_02.npz": "a2720a18d10b6b6948de47d743fafe40c4324ca52b2e4c2d4089604abe25a3a6",
+    "A_31_01.npz": "e71f46c53e735d3a524809d0d02a47f9209bf61663c2f4d274431783087effa9",
+    "A_33_01.npz": "cc0be876dc3a05caf0678af27812b44b4fd89799bbc3831d79409840dcb68420",
+    "A_68_01.npz": "5d2f96d44a4c7a8b6fc72b09c2846d4de1db089d4dbb98ce7eb1a1da68316058",
+    "B_07_02.npz": "032e96add894f1e8cb0b90648c7c00a9fb28b5e9cb08ed26c11389578288757f",
+    "B_08_01.npz": "a7e5fc279bb8415e50b107ac61d100e453cd465e2d1efd65235566e28a6ba6f1",
+    "B_15_01.npz": "ea38cd1b3252a02e9e054fb2644ab6144b4494ef3e4880ba64aac2a722a94af2",
+    "B_18_01.npz": "ffbe750a90008b6cfe4d6c0a966adea912fdb458741695c64f1e1167016d7ee2",
+    "B_27_05.npz": "76538ea6b90a4020a6c66e797357403ec72f3a906a728bd3bfc99ad678d1f33d",
+    "B_35_01.npz": "8fc14965b989d20a964683fb49cbc86fa6072f15fb027a1eaee0fc4f674134aa",
+    "B_40_01.npz": "6ae72b34b313cda6b2d38546ff82941e9587e5711ef1ac6d6ca5b0e6834e0048",
+    "B_44_02.npz": "181fa93d679794f3e4c27891cf205126194a2093c25dc2090de10e17ffd17fee",
+    "B_44_03.npz": "867f38bb2ab0297f53a94ba8b851fda8d57e968f18d22c197099915e2cc3bafe",
+    "B_46_01.npz": "884e12f640ad556485458e9b5c65b107665ff92b1418413ca52d69995b0ffed5",
+    "B_51_01.npz": "1728083ef61d7fef4cfcc7572ce9ada31c5cd167ae096dbba1d9798971349898",
+    "B_53_01.npz": "ecec04b0b95f680107feb6a087607e717a3036a13bf4aab9ce468d21b8f425e5",
+    "B_57_01.npz": "cbb3d82026cb24cf8a6f8f4f0725b70561c6fd42e40d434b4b1ba5e587078cc3",
+    "B_58_01.npz": "411f95ea8ce74e47ba013713ddb70320460ecfd612c66d37bb32034d923f7d41",
+    "metrics.json": "a4fe1c69b13b08d0df33936a914785b0ae1af4449f900ee997928d034263d14a"
+  },
+  "blosum62": {
+    "amino_acid_order": "ARNDCQEGHILKMFPSTWYV",
+    "citation": "Henikoff S, Henikoff JG. PNAS (1992). DOI 10.1073/pnas.89.22.10915"
+  },
+  "calibration": {
+    "interpretation": "percent of fixed self predictions at or below candidate IC50; lower is better",
+    "sample_size": 10000,
+    "sampling": "random.Random(1729).sample(range(500000), 10000), sorted by source order",
+    "source": "frozen seed-1729 UniProt human self-peptidome sample"
+  },
+  "censoring": {
+    "approximation": "IEDB < and > rows are optimized as their observed reported censor-bound values with ordinary MSE; they are not asserted to be exact measurements",
+    "measurement_inequality_counts": {
+      "<": 864,
+      "=": 54184,
+      ">": 40393
+    },
+    "roc_handling": "ROC uses a censored row only when its relation and bound establish its side of the 500 nM threshold; threshold-indeterminate rows are excluded from ROC only"
+  },
+  "dataset": {
+    "citation": "Kim Y et al. BMC Bioinformatics (2014), DOI 10.1186/1471-2105-15-241; Vita R et al. Nucleic Acids Res. (2019), DOI 10.1093/nar/gky1006",
+    "name": "IEDB quantitative MHC-I binding data, frozen 9/10-mer HLA-A/B subset",
+    "rows": 95441
+  },
+  "encoding": "20 BLOSUM62 score channels plus a constant 9mer=0/10mer=1 channel; 10mer residue vectors 5 and 6 are mean-pooled into center slot 5",
+  "format_version": 1,
+  "output": "log10 IC50 nM; clipping only while converting to positive physical IC50",
+  "seed": 1729,
+  "split": {
+    "assignment": "first 8 SHA256 bytes of '1729:'+peptide modulo 10000",
+    "fractions": {
+      "test": 0.1,
+      "train": 0.8,
+      "validation": 0.1
+    },
+    "scope": "global peptide identity before allele grouping"
+  },
+  "training": {
+    "deterministic_algorithms": true,
+    "device": "cpu",
+    "epochs": 24,
+    "learning_rate": 0.003,
+    "loss": "MSE on log10 observed IC50/censor-bound nM",
+    "optimizer": "Adam",
+    "wall_seconds": 6.0464781248010695
+  }
+}

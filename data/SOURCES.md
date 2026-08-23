@@ -167,3 +167,24 @@ curl -L --fail -o 1AO7.pdb https://files.rcsb.org/download/1AO7.pdb
 ```
 
 Transformations used only Python 3 standard-library facilities (`csv`, `gzip`, `json`, `random`, `sqlite3`, and `shlex`). Deterministic gzip files have zero timestamps. Validation re-opened every output, checked schema/content constraints, record and distinct counts, population-frequency sums, RCSB IDs, CCD component/atom counts, gzip timestamps, and every SHA-256 listed above.
+
+## S2 allele-specific MHC-I binder artifacts
+
+### `data/iedb/binder/`
+
+- **Derived sources:** The frozen `data/iedb/mhci_binding_9_10mer.tsv.gz` quantitative IEDB subset and the seed-1729 `data/self_peptidome/up000005640_human_9mers.txt.gz` calibration source documented above. Training performs no network access and adds no external records.
+- **Scientific citations:** BLOSUM62 is from Henikoff S, Henikoff JG. *Amino acid substitution matrices from protein blocks.* PNAS. 1992;89:10915-10919. DOI `10.1073/pnas.89.22.10915`. Binding measurements retain the IEDB citations above: Kim Y et al. DOI `10.1186/1471-2105-15-241` and Vita R et al. DOI `10.1093/nar/gky1006`.
+- **Artifacts:** Twenty-six safe NumPy NPZ files, one for each frozen HLA-A/B allele, plus `model_card.json` and `metrics.json`. NPZ members are float32 arrays only: the three linear layers' weights/biases and that allele's sorted 10,000-value self-peptidome IC50 calibration distribution. `model_card.json` records every NPZ SHA-256.
+- **Model and encoding:** Each independent allele model is exactly flattened 9x21 -> Linear(189,128) -> ReLU -> Linear(128,64) -> ReLU -> Linear(64,1), predicting log10 IC50 nM. The 21 channels are 20 BLOSUM62 scores in order `ARNDCQEGHILKMFPSTWYV` plus a constant length channel. Nine-mers map directly; 10-mer residue vectors 5 and 6 are mean-pooled into center slot 5.
+- **Split and fitting:** Global peptide identity is assigned before allele grouping by the first eight bytes of SHA-256(`1729:` + peptide), modulo 10,000: 80% train, 10% validation, 10% held-out test. CPU PyTorch deterministic algorithms, one thread, fixed allele-derived seeds, 24 epochs, Adam learning rate 0.003, and MSE on log10 reported IC50 were used. Measured `<` and `>` rows are handled honestly as their observed reported censor-bound values; treating these bounds as point targets is an explicit approximation, not a relabeling as exact measurements.
+- **Calibration:** The same fixed 10,000 self peptides are selected with `random.Random(1729).sample(range(500000), 10000)` from the already frozen self sample. Percentile is the percentage of calibration predictions at or below the candidate IC50, so lower is better.
+- **Real frozen evaluation:** 9,133 held-out rows; pooled Spearman `0.7376983698471881`; pooled ROC AUC at measured IC50 <= 500 nM `0.9313822300930815`; macro Spearman `0.6858724498021502`; macro ROC AUC `0.9209784972324174`. Metrics use average tie ranks and no SciPy. `validate_binder()` reloads NPZ weights, verifies global split disjointness, and reproduces the stored metrics without retraining.
+- **Determinism and runtime:** A second complete seeded CPU run reproduced all 26 NPZ files byte-for-byte. The final measured all-model training/artifact run took `6.46758654108271` seconds on the development machine, below the ten-minute limit.
+- **SHA-256:** `model_card.json` `ecc38414a0084e6d6bba2b8b6f49a7688a8f78c8036823b504a1c0f8f9a3e06c`; `metrics.json` `bdc18f9d59a3419f2916b9ed219c02abea7bf7756978122cdf46455229589a3b`. Individual NPZ hashes are frozen in the model card.
+
+### S2 binder evaluation correction — threshold-indeterminate censor bound
+
+- The final ROC evaluation excludes one held-out `B*46:01` row reported as `<5000 nM`: that relation does not establish which side of the 500 nM binder threshold contains the true value. Training and Spearman still use its observed bound under the explicitly documented point-target/rank approximation. All other held-out censored rows establish a threshold side.
+- The authoritative final evaluation has 9,133 held-out rows for Spearman and 9,132 ROC-evaluable rows, with one ROC-indeterminate row. Final pooled Spearman is `0.7376983698471881`, pooled ROC AUC is `0.9313744947688023`, macro Spearman is `0.6858724498021502`, and macro ROC AUC is `0.9209613910509277`.
+- The corrective final training/artifact run took `6.0464781248010695` seconds. It did not change model weights or calibration arrays; it updated metric interpretation and JSON provenance. This correction supersedes the earlier ROC values, JSON hashes, and final-run time immediately above.
+- **Authoritative SHA-256:** `model_card.json` `7e611aa70d24865a1d36bb826449460b67c38da0b66346a79304ceabeab02e7f`; `metrics.json` `a4fe1c69b13b08d0df33936a914785b0ae1af4449f900ee997928d034263d14a`.

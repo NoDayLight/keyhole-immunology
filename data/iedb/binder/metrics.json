@@ -1,0 +1,198 @@
+{
+  "aggregate": {
+    "macro_roc_auc_500nm": 0.9209613910509277,
+    "macro_spearman": 0.6858724498021502,
+    "pooled_roc_auc_500nm": 0.9313744947688023,
+    "pooled_spearman": 0.7376983698471881,
+    "roc_evaluable_rows": 9132,
+    "roc_indeterminate_rows": 1,
+    "test_rows": 9133
+  },
+  "binder_threshold_nm": 500.0,
+  "evaluation": "frozen global peptide-level held-out test split",
+  "per_allele": {
+    "A*01:01": {
+      "roc_auc_500nm": 0.9404347367310331,
+      "roc_evaluable_rows": 405,
+      "roc_indeterminate_rows": 0,
+      "spearman": 0.5925087419665448,
+      "test_rows": 405
+    },
+    "A*02:01": {
+      "roc_auc_500nm": 0.9480132010214672,
+      "roc_evaluable_rows": 1206,
+      "roc_indeterminate_rows": 0,
+      "spearman": 0.8246432309728566,
+      "test_rows": 1206
+    },
+    "A*03:01": {
+      "roc_auc_500nm": 0.9164256795835743,
+      "roc_evaluable_rows": 683,
+      "roc_indeterminate_rows": 0,
+      "spearman": 0.7527696971028006,
+      "test_rows": 683
+    },
+    "A*11:01": {
+      "roc_auc_500nm": 0.9358101258274196,
+      "roc_evaluable_rows": 614,
+      "roc_indeterminate_rows": 0,
+      "spearman": 0.8045478964868734,
+      "test_rows": 614
+    },
+    "A*23:01": {
+      "roc_auc_500nm": 0.9185686108763031,
+      "roc_evaluable_rows": 232,
+      "roc_indeterminate_rows": 0,
+      "spearman": 0.7629672842382774,
+      "test_rows": 232
+    },
+    "A*24:02": {
+      "roc_auc_500nm": 0.8957691869084274,
+      "roc_evaluable_rows": 311,
+      "roc_indeterminate_rows": 0,
+      "spearman": 0.710297964539737,
+      "test_rows": 311
+    },
+    "A*29:02": {
+      "roc_auc_500nm": 0.8751140302864441,
+      "roc_evaluable_rows": 237,
+      "roc_indeterminate_rows": 0,
+      "spearman": 0.6608066233015,
+      "test_rows": 237
+    },
+    "A*30:01": {
+      "roc_auc_500nm": 0.9029918996603084,
+      "roc_evaluable_rows": 264,
+      "roc_indeterminate_rows": 0,
+      "spearman": 0.7108182590410858,
+      "test_rows": 264
+    },
+    "A*30:02": {
+      "roc_auc_500nm": 0.8122555410691004,
+      "roc_evaluable_rows": 189,
+      "roc_indeterminate_rows": 0,
+      "spearman": 0.5619381143231521,
+      "test_rows": 189
+    },
+    "A*31:01": {
+      "roc_auc_500nm": 0.9069425599276345,
+      "roc_evaluable_rows": 556,
+      "roc_indeterminate_rows": 0,
+      "spearman": 0.6892841279496099,
+      "test_rows": 556
+    },
+    "A*33:01": {
+      "roc_auc_500nm": 0.9387832493634541,
+      "roc_evaluable_rows": 356,
+      "roc_indeterminate_rows": 0,
+      "spearman": 0.6916535940964044,
+      "test_rows": 356
+    },
+    "A*68:01": {
+      "roc_auc_500nm": 0.8956024602378952,
+      "roc_evaluable_rows": 388,
+      "roc_indeterminate_rows": 0,
+      "spearman": 0.8115553969508706,
+      "test_rows": 388
+    },
+    "B*07:02": {
+      "roc_auc_500nm": 0.9522853957636567,
+      "roc_evaluable_rows": 419,
+      "roc_indeterminate_rows": 0,
+      "spearman": 0.724560085637351,
+      "test_rows": 419
+    },
+    "B*08:01": {
+      "roc_auc_500nm": 0.9036263303113914,
+      "roc_evaluable_rows": 322,
+      "roc_indeterminate_rows": 0,
+      "spearman": 0.7002713036096466,
+      "test_rows": 322
+    },
+    "B*15:01": {
+      "roc_auc_500nm": 0.9210774784782005,
+      "roc_evaluable_rows": 407,
+      "roc_indeterminate_rows": 0,
+      "spearman": 0.734141630590666,
+      "test_rows": 407
+    },
+    "B*18:01": {
+      "roc_auc_500nm": 0.8962119925259046,
+      "roc_evaluable_rows": 232,
+      "roc_indeterminate_rows": 0,
+      "spearman": 0.5096430718972458,
+      "test_rows": 232
+    },
+    "B*27:05": {
+      "roc_auc_500nm": 0.9590099869735128,
+      "roc_evaluable_rows": 292,
+      "roc_indeterminate_rows": 0,
+      "spearman": 0.642582158964066,
+      "test_rows": 292
+    },
+    "B*35:01": {
+      "roc_auc_500nm": 0.9373151981076286,
+      "roc_evaluable_rows": 279,
+      "roc_indeterminate_rows": 0,
+      "spearman": 0.76234875008515,
+      "test_rows": 279
+    },
+    "B*40:01": {
+      "roc_auc_500nm": 0.9660306143845669,
+      "roc_evaluable_rows": 308,
+      "roc_indeterminate_rows": 0,
+      "spearman": 0.6261462293370326,
+      "test_rows": 308
+    },
+    "B*44:02": {
+      "roc_auc_500nm": 0.9424887729972475,
+      "roc_evaluable_rows": 216,
+      "roc_indeterminate_rows": 0,
+      "spearman": 0.6543658134466848,
+      "test_rows": 216
+    },
+    "B*44:03": {
+      "roc_auc_500nm": 0.9038528288788615,
+      "roc_evaluable_rows": 110,
+      "roc_indeterminate_rows": 0,
+      "spearman": 0.7873276828188683,
+      "test_rows": 110
+    },
+    "B*46:01": {
+      "roc_auc_500nm": 0.9346201743462017,
+      "roc_evaluable_rows": 157,
+      "roc_indeterminate_rows": 1,
+      "spearman": 0.5347459966932614,
+      "test_rows": 158
+    },
+    "B*51:01": {
+      "roc_auc_500nm": 0.9166666666666666,
+      "roc_evaluable_rows": 262,
+      "roc_indeterminate_rows": 0,
+      "spearman": 0.5450038507119551,
+      "test_rows": 262
+    },
+    "B*53:01": {
+      "roc_auc_500nm": 0.8866959064327485,
+      "roc_evaluable_rows": 146,
+      "roc_indeterminate_rows": 0,
+      "spearman": 0.7221601030812632,
+      "test_rows": 146
+    },
+    "B*57:01": {
+      "roc_auc_500nm": 0.9799265284702178,
+      "roc_evaluable_rows": 243,
+      "roc_indeterminate_rows": 0,
+      "spearman": 0.6162366570024291,
+      "test_rows": 243
+    },
+    "B*58:01": {
+      "roc_auc_500nm": 0.9584770114942529,
+      "roc_evaluable_rows": 298,
+      "roc_indeterminate_rows": 0,
+      "spearman": 0.6993594300105748,
+      "test_rows": 298
+    }
+  },
+  "training_wall_seconds": 6.0464781248010695
+}
