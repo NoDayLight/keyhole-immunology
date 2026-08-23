@@ -6,6 +6,7 @@ import pytest
 
 from keyhole.data import pdb_path
 from keyhole.structure import (
+    ONE_HHK_CHAIN_C_CA,
     SCHEMATIC_TRUTH,
     schematic_peptide_scene,
     structure_descriptor,
@@ -57,17 +58,63 @@ def test_real_structures_have_exact_truth_labels_and_roles() -> None:
     assert "D" not in misleading_keyword_entry["display_chains"]
 
 
-def test_candidate_scene_is_deterministic_and_unambiguously_schematic() -> None:
+def test_candidate_scene_uses_real_backbone_with_truthful_idealized_mutation() -> None:
     first = schematic_peptide_scene("GILGFVFTL", 4)
     second = schematic_peptide_scene("GILGFVFTL", 4)
     assert first == second
     assert first["truth"] == SCHEMATIC_TRUTH
-    assert "not an experimentally measured" in first["geometry"]
-    assert "not" in first["geometry"] and "HLA-docked" in first["geometry"]
-    assert len(first["atoms"]) == 9
-    assert len(first["bonds"]) == 8
-    assert first["atoms"][4]["role"] == "mutation"
-    assert all(atom["role"] == "peptide" for atom in first["atoms"][:4])
+    assert first["truth"] == (
+        "Real backbone (PDB 1HHK) · mutated side chain ideal geometry — illustrative"
+    )
+    assert "comes from measured PDB 1HHK" in first["geometry"]
+    assert "illustrative" in first["geometry"] and "HLA docking" in first["geometry"]
+    assert first["backbone_template"] == {
+        "pdb_id": "1HHK",
+        "chain": "C",
+        "atom": "CA",
+        "mapping": "direct 9-mer; source-index i*8/9 interpolation for 10-mer",
+    }
+    assert len(first["atoms"]) == 10
+    assert len(first["bonds"]) == 9
+    assert [
+        (atom["x"], atom["y"], atom["z"]) for atom in first["atoms"][:9]
+    ] == list(ONE_HHK_CHAIN_C_CA)
+    assert first["atoms"][1]["role"] == "anchor"
+    assert first["atoms"][8]["role"] == "anchor"
+    assert first["atoms"][4]["mutation_residue"] is True
+    assert first["atoms"][-1]["role"] == "mutation"
+    assert first["atoms"][-1]["residue"] == "F"
+    assert first["atoms"][-1]["res_seq"] == 5
+    assert first["bonds"][-1] == [5, 10]
+
+    ten_mer = schematic_peptide_scene("GILGFVFTLL", 1)
+    assert len(ten_mer["atoms"]) == 11
+    assert ten_mer["atoms"][0]["x"] == ONE_HHK_CHAIN_C_CA[0][0]
+    assert ten_mer["atoms"][0]["y"] == ONE_HHK_CHAIN_C_CA[0][1]
+    assert ten_mer["atoms"][0]["z"] == ONE_HHK_CHAIN_C_CA[0][2]
+    assert ten_mer["atoms"][9]["x"] == ONE_HHK_CHAIN_C_CA[-1][0]
+    assert ten_mer["atoms"][9]["y"] == ONE_HHK_CHAIN_C_CA[-1][1]
+    assert ten_mer["atoms"][9]["z"] == ONE_HHK_CHAIN_C_CA[-1][2]
+    for index, atom in enumerate(ten_mer["atoms"][:10]):
+        source_position = index * 8 / 9
+        lower = int(source_position)
+        upper = min(lower + 1, 8)
+        fraction = source_position - lower
+        expected = tuple(
+            round(
+                ONE_HHK_CHAIN_C_CA[lower][axis] * (1 - fraction)
+                + ONE_HHK_CHAIN_C_CA[upper][axis] * fraction,
+                6,
+            )
+            for axis in range(3)
+        )
+        assert (atom["x"], atom["y"], atom["z"]) == expected
+    assert ten_mer["atoms"][1]["role"] == "anchor"
+    assert ten_mer["atoms"][1]["mutation_residue"] is True
+    assert ten_mer["atoms"][-1]["role"] == "mutation"
+    assert ten_mer["atoms"][-1]["res_seq"] == 2
+    assert ten_mer["bonds"][-1] == [2, 11]
+
     with pytest.raises(ValueError, match="canonical"):
         schematic_peptide_scene("INVALIDXX", 2)
     with pytest.raises(ValueError, match="index"):

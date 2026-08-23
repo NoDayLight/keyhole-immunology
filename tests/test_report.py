@@ -83,7 +83,13 @@ def test_report_embeds_valid_results_all_scenes_and_scripts_in_order() -> None:
         assert "ATOM" in structure["pdb_text"]
     assert scenes["schematics"]
     assert all(
-        scene["truth"] == "Schematic — data real, geometry illustrative"
+        scene["truth"]
+        == "Real backbone (PDB 1HHK) · mutated side chain ideal geometry — illustrative"
+        for scene in scenes["schematics"].values()
+    )
+    assert all(
+        any(atom["role"] == "anchor" for atom in scene["atoms"])
+        and any(atom["role"] == "mutation" for atom in scene["atoms"])
         for scene in scenes["schematics"].values()
     )
 

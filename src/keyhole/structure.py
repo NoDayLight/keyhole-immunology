@@ -11,11 +11,47 @@ from keyhole.bind import AA_ORDER
 from keyhole.data import pdb_path
 
 REAL_TRUTH_PREFIX = "Real crystal structure (PDB "
-SCHEMATIC_TRUTH = "Schematic — data real, geometry illustrative"
-SCHEMATIC_DETAIL = (
-    "Residue-bead layout only; not an experimentally measured, structure-predicted, "
-    "or HLA-docked conformation."
+SCHEMATIC_TRUTH = (
+    "Real backbone (PDB 1HHK) · mutated side chain ideal geometry — illustrative"
 )
+SCHEMATIC_DETAIL = (
+    "The chain-C Cα backbone comes from measured PDB 1HHK coordinates; candidate residue "
+    "identity, 10-mer interpolation, and the idealized mutation side-chain endpoint are "
+    "illustrative, not a measured candidate pose, structure prediction, or HLA docking."
+)
+ONE_HHK_CHAIN_C_CA: tuple[tuple[float, float, float], ...] = (
+    (3.009, 11.537, 15.657),
+    (2.739, 14.291, 12.992),
+    (5.108, 17.244, 12.406),
+    (3.634, 20.393, 13.991),
+    (4.834, 23.423, 12.017),
+    (3.150, 24.808, 8.847),
+    (5.225, 24.651, 5.669),
+    (3.931, 26.374, 2.503),
+    (5.416, 26.033, -1.020),
+)
+IDEAL_SIDE_CHAIN_REACH = {
+    "A": 1.53,
+    "C": 2.80,
+    "D": 3.70,
+    "E": 4.80,
+    "F": 5.00,
+    "G": 1.20,
+    "H": 4.50,
+    "I": 3.80,
+    "K": 6.30,
+    "L": 4.00,
+    "M": 5.10,
+    "N": 3.60,
+    "P": 3.00,
+    "Q": 4.70,
+    "R": 6.60,
+    "S": 2.40,
+    "T": 2.80,
+    "V": 3.00,
+    "W": 6.00,
+    "Y": 5.70,
+}
 
 STRUCTURES: dict[str, dict[str, object]] = {
     "1HHK": {
@@ -201,39 +237,154 @@ def structure_payload(pdb_id: str) -> dict[str, object]:
     return descriptor
 
 
+def _interpolated_backbone(length: int) -> tuple[tuple[float, float, float], ...]:
+    """Map a 9/10-mer onto the 1HHK Cα trace without extrapolating its termini."""
+
+    if length == 9:
+        return ONE_HHK_CHAIN_C_CA
+    points: list[tuple[float, float, float]] = []
+    for index in range(length):
+        source_position = index * (len(ONE_HHK_CHAIN_C_CA) - 1) / (length - 1)
+        lower = math.floor(source_position)
+        upper = min(lower + 1, len(ONE_HHK_CHAIN_C_CA) - 1)
+        fraction = source_position - lower
+        points.append(
+            tuple(
+                round(
+                    ONE_HHK_CHAIN_C_CA[lower][axis] * (1 - fraction)
+                    + ONE_HHK_CHAIN_C_CA[upper][axis] * fraction,
+                    6,
+                )
+                for axis in range(3)
+            )
+        )
+    return tuple(points)
+
+
+def _subtract(
+    left: tuple[float, float, float], right: tuple[float, float, float]
+) -> tuple[float, float, float]:
+    return tuple(left[axis] - right[axis] for axis in range(3))
+
+
+def _cross(
+    left: tuple[float, float, float], right: tuple[float, float, float]
+) -> tuple[float, float, float]:
+    return (
+        left[1] * right[2] - left[2] * right[1],
+        left[2] * right[0] - left[0] * right[2],
+        left[0] * right[1] - left[1] * right[0],
+    )
+
+
+def _normalize(
+    vector: tuple[float, float, float],
+    fallback: tuple[float, float, float],
+) -> tuple[float, float, float]:
+    magnitude = math.sqrt(sum(value * value for value in vector))
+    if magnitude < 1e-9:
+        return fallback
+    return tuple(value / magnitude for value in vector)
+
+
+def _ideal_side_chain_endpoint(
+    backbone: tuple[tuple[float, float, float], ...], mutation_position: int, residue: str
+) -> tuple[float, float, float]:
+    """Place one illustrative endpoint at an ideal tetrahedral angle in a local Cα frame."""
+
+    current = backbone[mutation_position]
+    previous = backbone[max(0, mutation_position - 1)]
+    following = backbone[min(len(backbone) - 1, mutation_position + 1)]
+    tangent = _normalize(_subtract(following, previous), (1.0, 0.0, 0.0))
+    incoming = _normalize(_subtract(current, previous), tangent)
+    outgoing = _normalize(_subtract(following, current), tangent)
+    normal = _normalize(_cross(incoming, outgoing), _cross(tangent, (0.0, 0.0, 1.0)))
+    normal = _normalize(normal, _cross(tangent, (0.0, 1.0, 0.0)))
+    normal = _normalize(normal, (0.0, 0.0, 1.0))
+    tetrahedral = math.radians(109.5)
+    direction = _normalize(
+        tuple(
+            math.cos(tetrahedral) * tangent[axis]
+            + math.sin(tetrahedral) * normal[axis]
+            for axis in range(3)
+        ),
+        normal,
+    )
+    reach = IDEAL_SIDE_CHAIN_REACH[residue]
+    return tuple(round(current[axis] + reach * direction[axis], 6) for axis in range(3))
+
+
+def _side_chain_element(residue: str) -> str:
+    if residue in {"D", "E"}:
+        return "O"
+    if residue in {"H", "K", "N", "Q", "R"}:
+        return "N"
+    if residue in {"C", "M"}:
+        return "S"
+    return "C"
+
+
 def schematic_peptide_scene(sequence: str, mutation_position: int) -> dict[str, object]:
-    """Build a deterministic residue-bead schematic, never a claimed molecular pose."""
+    """Graft a candidate onto the real 1HHK peptide backbone with explicit caveats."""
 
     peptide = sequence.strip().upper()
     if len(peptide) not in {9, 10} or set(peptide) - set(AA_ORDER):
         raise ValueError("candidate schematic requires a canonical 9-mer or 10-mer")
     if mutation_position < 0 or mutation_position >= len(peptide):
         raise ValueError("mutation position must index the candidate peptide")
-    center = (len(peptide) - 1) / 2
+
+    backbone = _interpolated_backbone(len(peptide))
     atoms: list[dict[str, object]] = []
-    for index, residue in enumerate(peptide):
-        angle = index * 0.72
+    for index, (residue, coordinates) in enumerate(zip(peptide, backbone, strict=True)):
         atoms.append(
             {
                 "id": index + 1,
-                "name": "CA schematic bead",
+                "name": "CA from PDB 1HHK chain C",
                 "residue": residue,
                 "res_seq": index + 1,
                 "chain": "C",
                 "element": "C",
-                "x": round((index - center) * 3.4, 6),
-                "y": round(1.25 * math.sin(angle), 6),
-                "z": round(1.25 * math.cos(angle), 6),
-                "role": "mutation" if index == mutation_position else "peptide",
+                "x": coordinates[0],
+                "y": coordinates[1],
+                "z": coordinates[2],
+                "role": "anchor" if index in {1, len(peptide) - 1} else "peptide",
+                "mutation_residue": index == mutation_position,
             }
         )
+
+    side_chain = _ideal_side_chain_endpoint(
+        backbone, mutation_position, peptide[mutation_position]
+    )
+    atoms.append(
+        {
+            "id": len(peptide) + 1,
+            "name": "idealized mutation side-chain endpoint",
+            "residue": peptide[mutation_position],
+            "res_seq": mutation_position + 1,
+            "chain": "C",
+            "element": _side_chain_element(peptide[mutation_position]),
+            "x": side_chain[0],
+            "y": side_chain[1],
+            "z": side_chain[2],
+            "role": "mutation",
+            "geometry": "109.5-degree idealized local-backbone direction",
+        }
+    )
+    bonds = [[index, index + 1] for index in range(1, len(peptide))]
+    bonds.append([mutation_position + 1, len(peptide) + 1])
     return {
         "kind": "schematic",
         "sequence": peptide,
         "mutation_position": mutation_position,
         "truth": SCHEMATIC_TRUTH,
         "geometry": SCHEMATIC_DETAIL,
+        "backbone_template": {
+            "pdb_id": "1HHK",
+            "chain": "C",
+            "atom": "CA",
+            "mapping": "direct 9-mer; source-index i*8/9 interpolation for 10-mer",
+        },
         "atoms": atoms,
-        "bonds": [[index, index + 1] for index in range(1, len(peptide))],
+        "bonds": bonds,
         "chain_roles": {"C": "candidate peptide schematic"},
     }

@@ -24,7 +24,9 @@ def test_scene_assets_are_local_iifes_without_network_paths() -> None:
 def test_scene_source_contains_truth_accessibility_and_fallback_contract() -> None:
     source = (WEB / "scene.js").read_text(encoding="utf-8")
     assert "Real crystal structure (PDB " in source
-    assert "Schematic — data real, geometry illustrative" in source
+    assert (
+        "Real backbone (PDB 1HHK) · mutated side chain ideal geometry — illustrative" in source
+    )
     assert "aria-live" in source
     assert "aria-label" in source
     assert "<title>" in source and "<desc>" in source
@@ -40,6 +42,7 @@ def test_scene_render_quality_hot_paths_and_motion_contract() -> None:
     assert "gradientCache = new Map()" in source
     assert "createRadialGradient" in source
     assert "[1.5, 2.05]" in source
+    assert 'if (atom.role === "anchor") { return "#55cbd3"; }' in source
     assert "bondPairs: resolveBondPairs(atoms, bonds)" in source
     assert "prepared.bondPairs.forEach" in source
     assert "if (canvas.width !== pixelWidth)" in source

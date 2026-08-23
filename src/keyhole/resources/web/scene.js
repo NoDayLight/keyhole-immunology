@@ -3,7 +3,7 @@
   "use strict";
 
   var REAL_PREFIX = "Real crystal structure (PDB ";
-  var SCHEMATIC = "Schematic — data real, geometry illustrative";
+  var SCHEMATIC = "Real backbone (PDB 1HHK) · mutated side chain ideal geometry — illustrative";
   var IDLE_DELAY_MS = 3000;
   var AUTO_ROTATE_RADIANS_PER_MS = 0.00008;
   var INERTIA_DECAY_PER_FRAME = 0.92;
@@ -92,6 +92,7 @@
 
   function atomColor(atom, chainRoles) {
     if (atom.role === "mutation") { return "#d02f44"; }
+    if (atom.role === "anchor") { return "#55cbd3"; }
     var role = chainRoles[atom.chain] || "";
     if (ROLE_COLORS[role]) { return ROLE_COLORS[role]; }
     return ELEMENT_COLORS[atom.element] || "#68717d";

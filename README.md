@@ -40,7 +40,7 @@ Supported models: `A*01:01`, `A*02:01`, `A*03:01`, `A*11:01`, `A*23:01`, `A*24:0
 - **Processing, foreignness, agretopicity interpretation, and verdict — heuristic approximation:** transparent fixed calculations, not measured antigen processing or T-cell response.
 - **Population coverage — heuristic approximation:** seed-1729 Monte Carlo over observed AFR/AMR/EAS/EUR HLA-A/B marginals, assuming A–B linkage equilibrium and Hardy-Weinberg because phased haplotypes are unavailable. `ALL_OBSERVED` is cohort-weighted, not worldwide coverage. SAS is absent rather than fabricated.
 - **Literature panel:** 10 real published-positive IEDB T-cell records; 9 are evaluable by the A/B model panel. Composition-preserving shuffled controls are synthetic decoys, never assayed negatives.
-- **Molecular scenes:** `Real crystal structure (PDB id)` means untouched experimental PDB coordinates. `Schematic — data real, geometry illustrative` means deterministic residue beads—not measured, folded, predicted, docked, or atomic candidate geometry.
+- **Molecular scenes:** `Real crystal structure (PDB id)` means untouched experimental PDB coordinates. `Real backbone (PDB 1HHK) · mutated side chain ideal geometry — illustrative` means the candidate sequence is mapped onto the measured 1HHK chain-C Cα template; 10-mer interpolation and the mutation side-chain marker are illustrative—not measured candidate coordinates, folded predictions, or HLA docking.
 
 ## What this does NOT do
 
