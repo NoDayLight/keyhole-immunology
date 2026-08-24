@@ -226,17 +226,13 @@ Three places the loop changed the code rather than describing it:
 The release gate also builds the wheel, installs it into a clean Python 3.11 environment outside
 the repository with `KEYHOLE_DATA` unset, and checks the output bytes are unchanged. Front-end
 behaviour is verified in a scripted browser at 1512 px and 390 px, with and without reduced
-motion, and with WebGL disabled. Demo storyboard: [`docs/VIDEO.md`](docs/VIDEO.md).
+motion, and with WebGL disabled.
 
 ## Sources and terms
 
 Frozen URLs, transformations, counts, hashes, and license notes are in
 [`SOURCES.md`](src/keyhole/resources/data/SOURCES.md). TCGA and cBioPortal examples keep their
 original study and GDC terms.
-
-**This repository deliberately has no blanket LICENSE file.** It bundles assets under different
-terms, and inventing one licence over them would be wrong. Review the provenance file before
-redistributing.
 
 <details>
 <summary><b>Core citations</b></summary>
