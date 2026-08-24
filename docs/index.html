@@ -49,6 +49,7 @@
   --rail: 232px;
   --gutter: clamp(1.25rem, 3vw, 3.25rem);
   --measure: 68ch;
+  --control-h: 32px;
 }
 
 * { box-sizing: border-box; }
@@ -280,11 +281,14 @@ main { display: block; }
 }
 .fig-viewport { position: relative; }
 .fig-controls {
-  display: flex; gap: 0.55rem; align-items: center; flex-wrap: wrap;
-  margin-top: 0.7rem; min-height: 0;
+  display: flex; gap: 0.5rem; align-items: center; flex-wrap: wrap;
+  margin-top: 0.85rem; min-height: 0;
 }
 .fig-controls:empty { display: none; }
-.fig-hint { font: 400 0.735rem/1.4 var(--mono); color: var(--ink-3); }
+.fig-hint {
+  font: 400 0.735rem/1.5 var(--mono); color: var(--ink-3);
+  align-self: center; margin-left: 0.2rem;
+}
 .fig-legend {
   list-style: none; margin: 0.7rem 0 0; padding: 0;
   display: flex; flex-wrap: wrap; gap: 0.35rem 1.1rem;
@@ -405,31 +409,103 @@ details > ul { margin: 0; padding-left: 2rem; }
 .candidate-scene-host { min-width: 0; }
 
 /* --------------------------------------------------------------- controls */
+/* Every interactive control shares one height and one transition, so a row of mixed
+   controls sits on a single optical baseline instead of stepping up and down. */
 button, select, input {
-  font: inherit; color: var(--ink); background: var(--panel-2);
-  border: 1px solid var(--hair-strong); border-radius: 6px; padding: 0.42rem 0.7rem;
+  font: inherit; font-size: 0.8rem; line-height: 1; color: var(--ink);
+  background: var(--panel-2); border: 1px solid var(--hair-strong);
+  border-radius: 7px; min-height: var(--control-h); padding: 0 0.78rem;
+  transition: background-color 0.18s ease, border-color 0.18s ease, color 0.18s ease;
 }
-button { cursor: pointer; font-size: 0.8rem; }
-button:hover, select:hover, input:hover { border-color: #37414a; background: #151a20; }
+button { cursor: pointer; }
+.btn, .seg-item, .chip, .menu-trigger {
+  display: inline-flex; align-items: center; justify-content: center; gap: 0.4rem;
+  white-space: nowrap;
+}
+button:hover, select:hover, input:hover { border-color: #3b4650; background: #151a20; }
 button:focus-visible, select:focus-visible, input:focus-visible,
 a:focus-visible, summary:focus-visible, [tabindex]:focus-visible {
-  outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 4px;
+  outline: 2px solid var(--accent); outline-offset: 2px;
 }
-.btn-quiet { background: transparent; }
-.seg { display: inline-flex; border: 1px solid var(--hair-strong); border-radius: 6px; overflow: hidden; }
+input { justify-content: flex-start; text-align: left; }
+
+/* Three weights only: primary for the one action a figure wants you to take,
+   default for secondary actions, quiet for resets. */
+.btn-primary {
+  background: var(--accent); border-color: var(--accent);
+  color: #06101c; font-weight: 600;
+}
+.btn-primary:hover { background: #7db2ff; border-color: #7db2ff; color: #06101c; }
+.btn-primary:active { background: #4a8de8; border-color: #4a8de8; }
+.btn-quiet { background: transparent; color: var(--ink-2); }
+.btn-quiet:hover { color: var(--ink); }
+button:disabled, button[disabled] {
+  opacity: 0.42; cursor: not-allowed; background: var(--panel-2);
+  border-color: var(--hair); color: var(--ink-3);
+}
+.btn-primary:disabled { background: var(--panel-2); border-color: var(--hair); }
+
+/* The group is exactly one control tall: separators are insets, not borders. */
+.seg {
+  display: inline-flex; height: var(--control-h); background: var(--panel-2);
+  border: 1px solid var(--hair-strong); border-radius: 7px; overflow: hidden;
+}
 .seg-item {
-  border: 0; border-radius: 0; background: transparent; color: var(--ink-2);
-  border-left: 1px solid var(--hair-strong); padding: 0.42rem 0.75rem;
+  height: 100%; min-height: 0; border: 0; border-radius: 0; padding: 0 0.85rem;
+  background: transparent; color: var(--ink-2);
+  box-shadow: inset 1px 0 0 var(--hair-strong);
 }
-.seg-item:first-child { border-left: 0; }
-.seg-item[aria-pressed="true"] { background: var(--accent-sunk); color: var(--ink); }
+.seg-item:first-child { box-shadow: none; }
+.seg-item:hover { background: #151a20; color: var(--ink); }
+.seg-item[aria-pressed="true"], .seg-item[aria-selected="true"] {
+  background: var(--accent-sunk); color: var(--ink); font-weight: 500;
+}
 .chip {
-  border-radius: 999px; padding: 0.34rem 0.72rem; font-size: 0.765rem; color: var(--ink-2);
+  border-radius: 999px; padding: 0 0.8rem; font-size: 0.765rem; color: var(--ink-2);
   background: transparent;
 }
 .chip[aria-pressed="true"] { color: var(--ink); border-color: var(--accent); background: var(--accent-sunk); }
-.chip .count { font-family: var(--mono); color: var(--ink-3); margin-left: 0.4rem; }
+.chip .count { font-family: var(--mono); color: var(--ink-3); }
 .chip[aria-pressed="true"] .count { color: var(--accent); }
+
+/* ---------------------------------------------------------------- menu */
+/* Opens anchored below its trigger, left aligned, never centred over it. */
+.menu { position: relative; display: inline-flex; }
+.menu-native {
+  position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
+  overflow: hidden; clip: rect(0, 0, 0, 0); border: 0; min-height: 0;
+}
+.menu-trigger { font-family: var(--mono); font-size: 0.78rem; gap: 0.6rem; }
+.menu-trigger[aria-expanded="true"] { border-color: var(--accent); background: #151a20; }
+.menu-caret { width: 9px; height: 9px; flex: none; color: var(--ink-3); transition: transform 0.24s cubic-bezier(0.32, 0.72, 0, 1); }
+.menu-trigger[aria-expanded="true"] .menu-caret { transform: rotate(180deg); color: var(--accent); }
+.menu-caret path { stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; fill: none; }
+.menu-pop {
+  position: absolute; top: calc(100% + 6px); left: 0; z-index: 40;
+  min-width: 100%; max-height: 17rem; overflow-y: auto;
+  padding: 0.3rem; border: 1px solid var(--hair-strong); border-radius: 8px;
+  background: var(--panel-2); box-shadow: 0 12px 28px rgba(0, 0, 0, 0.55);
+  transform-origin: top left;
+  animation: menu-in 0.18s cubic-bezier(0.32, 0.72, 0, 1) both;
+}
+.menu-pop[hidden] { display: none; }
+@keyframes menu-in {
+  from { opacity: 0; transform: translateY(-6px) scale(0.97); }
+  to { opacity: 1; transform: none; }
+}
+.menu-option {
+  display: flex; align-items: center; gap: 0.5rem; width: 100%;
+  border: 0; border-radius: 5px; background: transparent; color: var(--ink-2);
+  font-family: var(--mono); font-size: 0.78rem; padding: 0 0.55rem;
+  min-height: 28px; justify-content: flex-start; text-align: left;
+}
+.menu-option:hover, .menu-option.is-active { background: #17202a; color: var(--ink); }
+.menu-option[aria-selected="true"] { color: var(--ink); background: var(--accent-sunk); }
+.menu-option::before {
+  content: ""; width: 4px; height: 4px; border-radius: 50%; flex: none;
+  background: transparent;
+}
+.menu-option[aria-selected="true"]::before { background: var(--accent); }
 
 .badge {
   display: inline-block; font: 500 9.5px/1.6 var(--mono); letter-spacing: 0.09em;
@@ -509,8 +585,15 @@ td.no { color: var(--ink-3); }
   padding: 0.5rem 0.6rem; border: 1px solid var(--hair-strong); border-radius: 6px;
   background: rgba(8, 10, 12, 0.95); font: 400 0.72rem/1.5 var(--mono); color: var(--ink-2);
 }
-.browser-head { display: flex; gap: 0.5rem; align-items: center; flex-wrap: wrap; margin-bottom: 0.7rem; }
-.filter-search { flex: 1 1 12rem; min-width: 9rem; font: 400 0.79rem/1.4 var(--mono); }
+.browser-head { display: flex; gap: 0.5rem; align-items: center; flex-wrap: wrap; margin-bottom: 0.8rem; }
+.filter-search {
+  flex: 1 1 12rem; min-width: 9rem; font-family: var(--mono); font-size: 0.78rem;
+}
+/* Tab strip gets its own band, so the figure caption below it can breathe. */
+.structure-toolbar {
+  display: flex; align-items: center; gap: 0.85rem; flex-wrap: wrap;
+  padding-bottom: 1.35rem; margin-bottom: 1.6rem; border-bottom: 1px solid var(--hair);
+}
 .candidate-list {
   display: flex; flex-direction: column; max-height: 21rem; overflow-y: auto;
   border: 1px solid var(--hair); border-radius: 8px; background: var(--panel);
@@ -1117,11 +1200,168 @@ globalThis.THREE=Object.freeze({ACESFilmicToneMapping:et,AmbientLight:xp,Box3:Di
     };
   }
 
+  /*
+   * Replaces a native <select> with a listbox that opens *below* its trigger, left
+   * aligned, instead of the platform popup that covers the control it came from.
+   *
+   * The native element stays in the DOM as the single source of truth: selecting an
+   * option writes `select.value` and dispatches `change`, so existing listeners keep
+   * working untouched. A programmatic `select.value = x` followed by a `change` event
+   * also updates the trigger, so the two directions stay in sync.
+   */
+  function selectMenu(select) {
+    if (!select || select.tagName !== "SELECT") { return { destroy: function () {} }; }
+    var options = Array.prototype.slice.call(select.options);
+    if (!options.length) { return { destroy: function () {} }; }
+
+    var wrap = node("div", "menu");
+    select.parentNode.insertBefore(wrap, select);
+    wrap.appendChild(select);
+    select.classList.add("menu-native");
+    select.setAttribute("tabindex", "-1");
+    select.setAttribute("aria-hidden", "true");
+
+    var trigger = button("btn menu-trigger", "");
+    trigger.setAttribute("aria-haspopup", "listbox");
+    trigger.setAttribute("aria-expanded", "false");
+    if (select.getAttribute("aria-label")) {
+      trigger.setAttribute("aria-label", select.getAttribute("aria-label"));
+    }
+    var label = node("span", "menu-value", "");
+    trigger.appendChild(label);
+    var caret = svg("svg", { class: "menu-caret", viewBox: "0 0 12 12", "aria-hidden": "true" });
+    caret.appendChild(svg("path", { d: "M2.5 4.5 6 8l3.5-3.5" }));
+    trigger.appendChild(caret);
+    wrap.appendChild(trigger);
+
+    var pop = node("div", "menu-pop");
+    pop.hidden = true;
+    pop.setAttribute("role", "listbox");
+    wrap.appendChild(pop);
+
+    var items = options.map(function (option) {
+      var item = button("menu-option", option.textContent);
+      item.setAttribute("role", "option");
+      item.dataset.value = option.value;
+      pop.appendChild(item);
+      return item;
+    });
+    var active = 0;
+    var open = false;
+    var listeners = [];
+
+    function listen(target, type, handler, capture) {
+      target.addEventListener(type, handler, capture);
+      listeners.push(function () { target.removeEventListener(type, handler, capture); });
+    }
+
+    function syncFromSelect() {
+      var index = select.selectedIndex < 0 ? 0 : select.selectedIndex;
+      active = index;
+      label.textContent = options[index] ? options[index].textContent : "";
+      items.forEach(function (item, position) {
+        item.setAttribute("aria-selected", position === index ? "true" : "false");
+        item.classList.toggle("is-active", position === index);
+      });
+    }
+
+    function markActive(index) {
+      active = Math.max(0, Math.min(items.length - 1, index));
+      items.forEach(function (item, position) {
+        item.classList.toggle("is-active", position === active);
+      });
+      var item = items[active];
+      if (!item) { return; }
+      /* Scroll inside the popup only. scrollIntoView would scroll the document and drag
+         the trigger out from under its own menu. */
+      var top = item.offsetTop;
+      var bottom = top + item.offsetHeight;
+      if (top < pop.scrollTop) { pop.scrollTop = top; }
+      else if (bottom > pop.scrollTop + pop.clientHeight) {
+        pop.scrollTop = bottom - pop.clientHeight;
+      }
+    }
+
+    function setOpen(next) {
+      if (open === next) { return; }
+      open = next;
+      pop.hidden = !next;
+      trigger.setAttribute("aria-expanded", next ? "true" : "false");
+      if (next) { markActive(select.selectedIndex < 0 ? 0 : select.selectedIndex); }
+    }
+
+    function choose(index) {
+      var option = options[index];
+      if (!option) { return; }
+      setOpen(false);
+      trigger.focus();
+      if (select.value === option.value) { return; }
+      select.value = option.value;
+      syncFromSelect();
+      select.dispatchEvent(new Event("change", { bubbles: true }));
+    }
+
+    listen(trigger, "click", function (event) {
+      event.preventDefault();
+      setOpen(!open);
+    });
+    listen(trigger, "keydown", function (event) {
+      if (event.key === "ArrowDown" || event.key === "ArrowUp" || event.key === "Enter" ||
+        event.key === " ") {
+        event.preventDefault();
+        setOpen(true);
+      } else if (event.key === "Escape") {
+        setOpen(false);
+      }
+    });
+    listen(pop, "click", function (event) {
+      var item = event.target.closest ? event.target.closest(".menu-option") : null;
+      if (!item) { return; }
+      event.preventDefault();
+      choose(items.indexOf(item));
+    });
+    listen(pop, "pointermove", function (event) {
+      var item = event.target.closest ? event.target.closest(".menu-option") : null;
+      if (item) { markActive(items.indexOf(item)); }
+    });
+    listen(wrap, "keydown", function (event) {
+      if (!open) { return; }
+      if (event.key === "ArrowDown") { event.preventDefault(); markActive(active + 1); }
+      else if (event.key === "ArrowUp") { event.preventDefault(); markActive(active - 1); }
+      else if (event.key === "Home") { event.preventDefault(); markActive(0); }
+      else if (event.key === "End") { event.preventDefault(); markActive(items.length - 1); }
+      else if (event.key === "Enter" || event.key === " ") { event.preventDefault(); choose(active); }
+      else if (event.key === "Escape") { event.preventDefault(); setOpen(false); trigger.focus(); }
+      else if (event.key === "Tab") { setOpen(false); }
+    });
+    listen(document, "pointerdown", function (event) {
+      if (open && !wrap.contains(event.target)) { setOpen(false); }
+    }, true);
+    listen(select, "change", syncFromSelect);
+
+    syncFromSelect();
+
+    return {
+      element: wrap,
+      sync: syncFromSelect,
+      destroy: function () {
+        setOpen(false);
+        listeners.splice(0).forEach(function (remove) { remove(); });
+        select.classList.remove("menu-native");
+        select.removeAttribute("aria-hidden");
+        select.removeAttribute("tabindex");
+        if (wrap.parentNode) { wrap.parentNode.insertBefore(select, wrap); }
+        wrap.remove();
+      }
+    };
+  }
+
   global.KEYHOLE = global.KEYHOLE || {};
   global.KEYHOLE.ui = Object.freeze({
     SVG_NS: SVG_NS,
     button: button,
     enhanceDisclosures: enhanceDisclosures,
+    selectMenu: selectMenu,
     figure: figure,
     fixed: fixed,
     metric: metric,
@@ -4095,7 +4335,8 @@ globalThis.THREE=Object.freeze({ACESFilmicToneMapping:et,AmbientLight:xp,Box3:Di
     tooltip.setAttribute("role", "status");
     witnessFig.viewport.appendChild(tooltip);
 
-    var replay = UI.button("btn btn-quiet", "Replay candidate flow");
+    /* The primary action of this figure, so it gets the only filled button on the page. */
+    var replay = UI.button("btn btn-primary", "Replay candidate flow");
     replay.setAttribute("aria-label", "Replay the deterministic candidate funnel animation");
     witnessFig.addControl(replay);
     witnessFig.hint(candidates.length + " real mutation-derived candidates · seed " + results.meta.seed);
@@ -4820,13 +5061,13 @@ globalThis.THREE=Object.freeze({ACESFilmicToneMapping:et,AmbientLight:xp,Box3:Di
     var resizeObserver = null;
     var globeController = null;
     var barsController = null;
+    var menuController = null;
     var unsubscribeSelection = null;
     var useWebglGlobe = global.KEYHOLE.globe.supported();
 
     /* ------------------------------------------------------------- controls */
     var chooser = node("div", "browser-head");
-    var chooserLabel = node("label", "fig-hint", "Candidate peptide");
-    chooserLabel.setAttribute("for", "atlas-candidate");
+    var chooserLabel = node("span", "fig-hint", "Candidate peptide");
     var selector = node("select", "");
     selector.id = "atlas-candidate";
     selector.setAttribute("aria-label", "Choose peptide for population coverage");
@@ -5166,6 +5407,9 @@ globalThis.THREE=Object.freeze({ACESFilmicToneMapping:et,AmbientLight:xp,Box3:Di
         ]);
         if (cell.visible) { row.classList.add("is-selected"); }
       });
+      /* Keep the enhanced menu trigger truthful however the value was set, including the
+         programmatic adoption of a selection published before this module subscribed. */
+      if (menuController) { menuController.sync(); }
       caveat.textContent = population.meta.assumption + " Seed " + population.meta.seed + "; " +
         population.meta.draws + " draws. ALL_OBSERVED is cohort-weighted, not worldwide coverage. " +
         "SAS is absent; unmodeled HLA alleles are unknown, not invisible.";
@@ -5257,11 +5501,13 @@ globalThis.THREE=Object.freeze({ACESFilmicToneMapping:et,AmbientLight:xp,Box3:Di
       if (unsubscribeSelection) { unsubscribeSelection(); unsubscribeSelection = null; }
       if (globeController) { globeController.destroy(); globeController = null; }
       if (barsController) { barsController.destroy(); barsController = null; }
+      if (menuController) { menuController.destroy(); menuController = null; }
       container.replaceChildren();
     }
 
     try {
       selector.addEventListener("change", updateEvidence);
+      menuController = UI.selectMenu(selector);
       resetGlobeButton.addEventListener("click", resetGlobe);
       canvas.addEventListener("pointerdown", pointerDown);
       canvas.addEventListener("pointermove", pointerMove);
@@ -5305,7 +5551,9 @@ globalThis.THREE=Object.freeze({ACESFilmicToneMapping:et,AmbientLight:xp,Box3:Di
           if (!state.candidateKey || keys.indexOf(state.candidateKey) === -1) { return; }
           if (selector.value === state.candidateKey) { return; }
           selector.value = state.candidateKey;
-          updateEvidence();
+          /* Dispatching change keeps the enhanced menu label and updateEvidence in step
+             from one place. The handler tags its own selection origin, so no loop. */
+          selector.dispatchEvent(new Event("change", { bubbles: true }));
         });
         /* Adopt any selection published before this module subscribed. */
         var initial = selection.get().candidateKey;
@@ -5645,13 +5893,20 @@ globalThis.THREE=Object.freeze({ACESFilmicToneMapping:et,AmbientLight:xp,Box3:Di
       return { destroy: function () { container.replaceChildren(); } };
     }
 
+    /* The tab strip sits in its own band with a rule beneath it, so the figure caption
+       that follows is not crowded against the controls. */
+    var toolbar = UI.node("div", "structure-toolbar");
     var tabs = UI.node("div", "seg");
     tabs.setAttribute("role", "tablist");
     tabs.setAttribute("aria-label", "Packaged experimental structures");
+    toolbar.appendChild(tabs);
+    toolbar.appendChild(UI.node(
+      "span", "fig-hint", available.length + " packaged entries · untouched coordinates"
+    ));
     var panel = UI.node("div", "");
     panel.id = "structure-panel";
     panel.setAttribute("role", "tabpanel");
-    container.appendChild(tabs);
+    container.appendChild(toolbar);
     container.appendChild(panel);
 
     var controller = null;
@@ -5725,6 +5980,7 @@ globalThis.THREE=Object.freeze({ACESFilmicToneMapping:et,AmbientLight:xp,Box3:Di
         tabs.removeEventListener("click", clicked);
         tabs.removeEventListener("keydown", keyed);
         if (controller) { controller.destroy(); controller = null; }
+        toolbar.remove();
         container.replaceChildren();
       }
     };

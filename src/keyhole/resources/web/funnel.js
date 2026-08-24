@@ -365,7 +365,8 @@
     tooltip.setAttribute("role", "status");
     witnessFig.viewport.appendChild(tooltip);
 
-    var replay = UI.button("btn btn-quiet", "Replay candidate flow");
+    /* The primary action of this figure, so it gets the only filled button on the page. */
+    var replay = UI.button("btn btn-primary", "Replay candidate flow");
     replay.setAttribute("aria-label", "Replay the deterministic candidate funnel animation");
     witnessFig.addControl(replay);
     witnessFig.hint(candidates.length + " real mutation-derived candidates · seed " + results.meta.seed);

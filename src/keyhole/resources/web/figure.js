@@ -377,11 +377,168 @@
     };
   }
 
+  /*
+   * Replaces a native <select> with a listbox that opens *below* its trigger, left
+   * aligned, instead of the platform popup that covers the control it came from.
+   *
+   * The native element stays in the DOM as the single source of truth: selecting an
+   * option writes `select.value` and dispatches `change`, so existing listeners keep
+   * working untouched. A programmatic `select.value = x` followed by a `change` event
+   * also updates the trigger, so the two directions stay in sync.
+   */
+  function selectMenu(select) {
+    if (!select || select.tagName !== "SELECT") { return { destroy: function () {} }; }
+    var options = Array.prototype.slice.call(select.options);
+    if (!options.length) { return { destroy: function () {} }; }
+
+    var wrap = node("div", "menu");
+    select.parentNode.insertBefore(wrap, select);
+    wrap.appendChild(select);
+    select.classList.add("menu-native");
+    select.setAttribute("tabindex", "-1");
+    select.setAttribute("aria-hidden", "true");
+
+    var trigger = button("btn menu-trigger", "");
+    trigger.setAttribute("aria-haspopup", "listbox");
+    trigger.setAttribute("aria-expanded", "false");
+    if (select.getAttribute("aria-label")) {
+      trigger.setAttribute("aria-label", select.getAttribute("aria-label"));
+    }
+    var label = node("span", "menu-value", "");
+    trigger.appendChild(label);
+    var caret = svg("svg", { class: "menu-caret", viewBox: "0 0 12 12", "aria-hidden": "true" });
+    caret.appendChild(svg("path", { d: "M2.5 4.5 6 8l3.5-3.5" }));
+    trigger.appendChild(caret);
+    wrap.appendChild(trigger);
+
+    var pop = node("div", "menu-pop");
+    pop.hidden = true;
+    pop.setAttribute("role", "listbox");
+    wrap.appendChild(pop);
+
+    var items = options.map(function (option) {
+      var item = button("menu-option", option.textContent);
+      item.setAttribute("role", "option");
+      item.dataset.value = option.value;
+      pop.appendChild(item);
+      return item;
+    });
+    var active = 0;
+    var open = false;
+    var listeners = [];
+
+    function listen(target, type, handler, capture) {
+      target.addEventListener(type, handler, capture);
+      listeners.push(function () { target.removeEventListener(type, handler, capture); });
+    }
+
+    function syncFromSelect() {
+      var index = select.selectedIndex < 0 ? 0 : select.selectedIndex;
+      active = index;
+      label.textContent = options[index] ? options[index].textContent : "";
+      items.forEach(function (item, position) {
+        item.setAttribute("aria-selected", position === index ? "true" : "false");
+        item.classList.toggle("is-active", position === index);
+      });
+    }
+
+    function markActive(index) {
+      active = Math.max(0, Math.min(items.length - 1, index));
+      items.forEach(function (item, position) {
+        item.classList.toggle("is-active", position === active);
+      });
+      var item = items[active];
+      if (!item) { return; }
+      /* Scroll inside the popup only. scrollIntoView would scroll the document and drag
+         the trigger out from under its own menu. */
+      var top = item.offsetTop;
+      var bottom = top + item.offsetHeight;
+      if (top < pop.scrollTop) { pop.scrollTop = top; }
+      else if (bottom > pop.scrollTop + pop.clientHeight) {
+        pop.scrollTop = bottom - pop.clientHeight;
+      }
+    }
+
+    function setOpen(next) {
+      if (open === next) { return; }
+      open = next;
+      pop.hidden = !next;
+      trigger.setAttribute("aria-expanded", next ? "true" : "false");
+      if (next) { markActive(select.selectedIndex < 0 ? 0 : select.selectedIndex); }
+    }
+
+    function choose(index) {
+      var option = options[index];
+      if (!option) { return; }
+      setOpen(false);
+      trigger.focus();
+      if (select.value === option.value) { return; }
+      select.value = option.value;
+      syncFromSelect();
+      select.dispatchEvent(new Event("change", { bubbles: true }));
+    }
+
+    listen(trigger, "click", function (event) {
+      event.preventDefault();
+      setOpen(!open);
+    });
+    listen(trigger, "keydown", function (event) {
+      if (event.key === "ArrowDown" || event.key === "ArrowUp" || event.key === "Enter" ||
+        event.key === " ") {
+        event.preventDefault();
+        setOpen(true);
+      } else if (event.key === "Escape") {
+        setOpen(false);
+      }
+    });
+    listen(pop, "click", function (event) {
+      var item = event.target.closest ? event.target.closest(".menu-option") : null;
+      if (!item) { return; }
+      event.preventDefault();
+      choose(items.indexOf(item));
+    });
+    listen(pop, "pointermove", function (event) {
+      var item = event.target.closest ? event.target.closest(".menu-option") : null;
+      if (item) { markActive(items.indexOf(item)); }
+    });
+    listen(wrap, "keydown", function (event) {
+      if (!open) { return; }
+      if (event.key === "ArrowDown") { event.preventDefault(); markActive(active + 1); }
+      else if (event.key === "ArrowUp") { event.preventDefault(); markActive(active - 1); }
+      else if (event.key === "Home") { event.preventDefault(); markActive(0); }
+      else if (event.key === "End") { event.preventDefault(); markActive(items.length - 1); }
+      else if (event.key === "Enter" || event.key === " ") { event.preventDefault(); choose(active); }
+      else if (event.key === "Escape") { event.preventDefault(); setOpen(false); trigger.focus(); }
+      else if (event.key === "Tab") { setOpen(false); }
+    });
+    listen(document, "pointerdown", function (event) {
+      if (open && !wrap.contains(event.target)) { setOpen(false); }
+    }, true);
+    listen(select, "change", syncFromSelect);
+
+    syncFromSelect();
+
+    return {
+      element: wrap,
+      sync: syncFromSelect,
+      destroy: function () {
+        setOpen(false);
+        listeners.splice(0).forEach(function (remove) { remove(); });
+        select.classList.remove("menu-native");
+        select.removeAttribute("aria-hidden");
+        select.removeAttribute("tabindex");
+        if (wrap.parentNode) { wrap.parentNode.insertBefore(select, wrap); }
+        wrap.remove();
+      }
+    };
+  }
+
   global.KEYHOLE = global.KEYHOLE || {};
   global.KEYHOLE.ui = Object.freeze({
     SVG_NS: SVG_NS,
     button: button,
     enhanceDisclosures: enhanceDisclosures,
+    selectMenu: selectMenu,
     figure: figure,
     fixed: fixed,
     metric: metric,

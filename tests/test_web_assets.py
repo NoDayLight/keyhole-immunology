@@ -449,6 +449,81 @@ def test_disclosure_animation_never_takes_over_details_state() -> None:
     assert "@keyframes disclose" in css
 
 
+def test_controls_share_one_height_and_one_primary_action() -> None:
+    """Mixed control rows must sit on one baseline, with a single filled primary action."""
+
+    css = (WEB / "style.css").read_text(encoding="utf-8")
+    funnel = (WEB / "funnel.js").read_text(encoding="utf-8")
+
+    # One height token drives every control, so a row of mixed controls cannot step.
+    assert "--control-h: 32px;" in css
+    assert "min-height: var(--control-h);" in css
+    assert "height: var(--control-h);" in css
+    assert ".btn, .seg-item, .chip, .menu-trigger {" in css
+    assert "justify-content: center;" in css
+    # The segmented group separates items with insets, so borders cannot add height.
+    assert "box-shadow: inset 1px 0 0 var(--hair-strong);" in css
+
+    # Exactly one filled primary button exists, and it is the funnel's replay action.
+    assert ".btn-primary {" in css
+    assert "background: var(--accent); border-color: var(--accent);" in css
+    assert 'UI.button("btn btn-primary", "Replay candidate flow")' in funnel
+    assert css.count(".btn-primary {") == 1
+    assert "button:disabled, button[disabled]" in css
+
+    # The structure tab strip owns a band with a rule, so the caption below can breathe.
+    assert ".structure-toolbar {" in css
+    assert "border-bottom: 1px solid var(--hair);" in css
+    assert 'UI.node("div", "structure-toolbar")' in (WEB / "main.js").read_text(encoding="utf-8")
+
+
+def test_select_menu_opens_below_and_keeps_the_native_select_authoritative() -> None:
+    """The enhanced menu is a view over a real <select>, anchored under its trigger."""
+
+    figure = (WEB / "figure.js").read_text(encoding="utf-8")
+    css = (WEB / "style.css").read_text(encoding="utf-8")
+    atlas = (WEB / "atlas.js").read_text(encoding="utf-8")
+
+    assert "function selectMenu(select)" in figure
+    assert "selectMenu: selectMenu" in figure
+    assert "menuController = UI.selectMenu(selector);" in atlas
+
+    # Anchored below and left aligned, never centred over the control.
+    assert "top: calc(100% + 6px); left: 0;" in css
+    assert "transform-origin: top left;" in css
+    assert "@keyframes menu-in" in css
+    assert "translateY(-6px) scale(0.97)" in css
+
+    # The native element stays in the DOM and remains the source of truth.
+    assert "select.tagName !== \"SELECT\"" in figure
+    assert 'select.classList.add("menu-native")' in figure
+    assert "select.value = option.value;" in figure
+    assert 'select.dispatchEvent(new Event("change", { bubbles: true }))' in figure
+    assert 'listen(select, "change", syncFromSelect)' in figure
+    assert 'removeEventListener("change"' in atlas
+    # Programmatic value changes still reach the trigger label.
+    assert "if (menuController) { menuController.sync(); }" in atlas
+
+    # Full keyboard support and a real listbox contract.
+    assert 'trigger.setAttribute("aria-haspopup", "listbox")' in figure
+    assert 'pop.setAttribute("role", "listbox")' in figure
+    assert 'item.setAttribute("role", "option")' in figure
+    for key in ("ArrowDown", "ArrowUp", "Home", "End", "Enter", "Escape", "Tab"):
+        assert f'event.key === "{key}"' in figure, key
+
+    # Opening the menu must never scroll the document out from under the trigger, so the
+    # popup is scrolled directly rather than through a scrollIntoView call.
+    assert "scrollIntoView(" not in figure
+    assert "pop.scrollTop = top;" in figure
+    assert "pop.scrollTop = bottom - pop.clientHeight;" in figure
+
+    # Closes on outside pointerdown, and teardown restores the original select.
+    assert 'listen(document, "pointerdown"' in figure
+    assert "!wrap.contains(event.target)" in figure
+    assert 'select.classList.remove("menu-native")' in figure
+    assert "if (menuController) { menuController.destroy(); menuController = null; }" in atlas
+
+
 def test_stylesheet_declares_one_accent_three_type_roles_and_motion_rules() -> None:
     css = (WEB / "style.css").read_text(encoding="utf-8")
     # Three type roles, declared once each.

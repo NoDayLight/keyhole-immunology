@@ -55,13 +55,20 @@
       return { destroy: function () { container.replaceChildren(); } };
     }
 
+    /* The tab strip sits in its own band with a rule beneath it, so the figure caption
+       that follows is not crowded against the controls. */
+    var toolbar = UI.node("div", "structure-toolbar");
     var tabs = UI.node("div", "seg");
     tabs.setAttribute("role", "tablist");
     tabs.setAttribute("aria-label", "Packaged experimental structures");
+    toolbar.appendChild(tabs);
+    toolbar.appendChild(UI.node(
+      "span", "fig-hint", available.length + " packaged entries · untouched coordinates"
+    ));
     var panel = UI.node("div", "");
     panel.id = "structure-panel";
     panel.setAttribute("role", "tabpanel");
-    container.appendChild(tabs);
+    container.appendChild(toolbar);
     container.appendChild(panel);
 
     var controller = null;
@@ -135,6 +142,7 @@
         tabs.removeEventListener("click", clicked);
         tabs.removeEventListener("keydown", keyed);
         if (controller) { controller.destroy(); controller = null; }
+        toolbar.remove();
         container.replaceChildren();
       }
     };

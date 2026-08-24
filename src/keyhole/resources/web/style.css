@@ -42,6 +42,7 @@
   --rail: 232px;
   --gutter: clamp(1.25rem, 3vw, 3.25rem);
   --measure: 68ch;
+  --control-h: 32px;
 }
 
 * { box-sizing: border-box; }
@@ -273,11 +274,14 @@ main { display: block; }
 }
 .fig-viewport { position: relative; }
 .fig-controls {
-  display: flex; gap: 0.55rem; align-items: center; flex-wrap: wrap;
-  margin-top: 0.7rem; min-height: 0;
+  display: flex; gap: 0.5rem; align-items: center; flex-wrap: wrap;
+  margin-top: 0.85rem; min-height: 0;
 }
 .fig-controls:empty { display: none; }
-.fig-hint { font: 400 0.735rem/1.4 var(--mono); color: var(--ink-3); }
+.fig-hint {
+  font: 400 0.735rem/1.5 var(--mono); color: var(--ink-3);
+  align-self: center; margin-left: 0.2rem;
+}
 .fig-legend {
   list-style: none; margin: 0.7rem 0 0; padding: 0;
   display: flex; flex-wrap: wrap; gap: 0.35rem 1.1rem;
@@ -398,31 +402,103 @@ details > ul { margin: 0; padding-left: 2rem; }
 .candidate-scene-host { min-width: 0; }
 
 /* --------------------------------------------------------------- controls */
+/* Every interactive control shares one height and one transition, so a row of mixed
+   controls sits on a single optical baseline instead of stepping up and down. */
 button, select, input {
-  font: inherit; color: var(--ink); background: var(--panel-2);
-  border: 1px solid var(--hair-strong); border-radius: 6px; padding: 0.42rem 0.7rem;
+  font: inherit; font-size: 0.8rem; line-height: 1; color: var(--ink);
+  background: var(--panel-2); border: 1px solid var(--hair-strong);
+  border-radius: 7px; min-height: var(--control-h); padding: 0 0.78rem;
+  transition: background-color 0.18s ease, border-color 0.18s ease, color 0.18s ease;
 }
-button { cursor: pointer; font-size: 0.8rem; }
-button:hover, select:hover, input:hover { border-color: #37414a; background: #151a20; }
+button { cursor: pointer; }
+.btn, .seg-item, .chip, .menu-trigger {
+  display: inline-flex; align-items: center; justify-content: center; gap: 0.4rem;
+  white-space: nowrap;
+}
+button:hover, select:hover, input:hover { border-color: #3b4650; background: #151a20; }
 button:focus-visible, select:focus-visible, input:focus-visible,
 a:focus-visible, summary:focus-visible, [tabindex]:focus-visible {
-  outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 4px;
+  outline: 2px solid var(--accent); outline-offset: 2px;
 }
-.btn-quiet { background: transparent; }
-.seg { display: inline-flex; border: 1px solid var(--hair-strong); border-radius: 6px; overflow: hidden; }
+input { justify-content: flex-start; text-align: left; }
+
+/* Three weights only: primary for the one action a figure wants you to take,
+   default for secondary actions, quiet for resets. */
+.btn-primary {
+  background: var(--accent); border-color: var(--accent);
+  color: #06101c; font-weight: 600;
+}
+.btn-primary:hover { background: #7db2ff; border-color: #7db2ff; color: #06101c; }
+.btn-primary:active { background: #4a8de8; border-color: #4a8de8; }
+.btn-quiet { background: transparent; color: var(--ink-2); }
+.btn-quiet:hover { color: var(--ink); }
+button:disabled, button[disabled] {
+  opacity: 0.42; cursor: not-allowed; background: var(--panel-2);
+  border-color: var(--hair); color: var(--ink-3);
+}
+.btn-primary:disabled { background: var(--panel-2); border-color: var(--hair); }
+
+/* The group is exactly one control tall: separators are insets, not borders. */
+.seg {
+  display: inline-flex; height: var(--control-h); background: var(--panel-2);
+  border: 1px solid var(--hair-strong); border-radius: 7px; overflow: hidden;
+}
 .seg-item {
-  border: 0; border-radius: 0; background: transparent; color: var(--ink-2);
-  border-left: 1px solid var(--hair-strong); padding: 0.42rem 0.75rem;
+  height: 100%; min-height: 0; border: 0; border-radius: 0; padding: 0 0.85rem;
+  background: transparent; color: var(--ink-2);
+  box-shadow: inset 1px 0 0 var(--hair-strong);
 }
-.seg-item:first-child { border-left: 0; }
-.seg-item[aria-pressed="true"] { background: var(--accent-sunk); color: var(--ink); }
+.seg-item:first-child { box-shadow: none; }
+.seg-item:hover { background: #151a20; color: var(--ink); }
+.seg-item[aria-pressed="true"], .seg-item[aria-selected="true"] {
+  background: var(--accent-sunk); color: var(--ink); font-weight: 500;
+}
 .chip {
-  border-radius: 999px; padding: 0.34rem 0.72rem; font-size: 0.765rem; color: var(--ink-2);
+  border-radius: 999px; padding: 0 0.8rem; font-size: 0.765rem; color: var(--ink-2);
   background: transparent;
 }
 .chip[aria-pressed="true"] { color: var(--ink); border-color: var(--accent); background: var(--accent-sunk); }
-.chip .count { font-family: var(--mono); color: var(--ink-3); margin-left: 0.4rem; }
+.chip .count { font-family: var(--mono); color: var(--ink-3); }
 .chip[aria-pressed="true"] .count { color: var(--accent); }
+
+/* ---------------------------------------------------------------- menu */
+/* Opens anchored below its trigger, left aligned, never centred over it. */
+.menu { position: relative; display: inline-flex; }
+.menu-native {
+  position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
+  overflow: hidden; clip: rect(0, 0, 0, 0); border: 0; min-height: 0;
+}
+.menu-trigger { font-family: var(--mono); font-size: 0.78rem; gap: 0.6rem; }
+.menu-trigger[aria-expanded="true"] { border-color: var(--accent); background: #151a20; }
+.menu-caret { width: 9px; height: 9px; flex: none; color: var(--ink-3); transition: transform 0.24s cubic-bezier(0.32, 0.72, 0, 1); }
+.menu-trigger[aria-expanded="true"] .menu-caret { transform: rotate(180deg); color: var(--accent); }
+.menu-caret path { stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; fill: none; }
+.menu-pop {
+  position: absolute; top: calc(100% + 6px); left: 0; z-index: 40;
+  min-width: 100%; max-height: 17rem; overflow-y: auto;
+  padding: 0.3rem; border: 1px solid var(--hair-strong); border-radius: 8px;
+  background: var(--panel-2); box-shadow: 0 12px 28px rgba(0, 0, 0, 0.55);
+  transform-origin: top left;
+  animation: menu-in 0.18s cubic-bezier(0.32, 0.72, 0, 1) both;
+}
+.menu-pop[hidden] { display: none; }
+@keyframes menu-in {
+  from { opacity: 0; transform: translateY(-6px) scale(0.97); }
+  to { opacity: 1; transform: none; }
+}
+.menu-option {
+  display: flex; align-items: center; gap: 0.5rem; width: 100%;
+  border: 0; border-radius: 5px; background: transparent; color: var(--ink-2);
+  font-family: var(--mono); font-size: 0.78rem; padding: 0 0.55rem;
+  min-height: 28px; justify-content: flex-start; text-align: left;
+}
+.menu-option:hover, .menu-option.is-active { background: #17202a; color: var(--ink); }
+.menu-option[aria-selected="true"] { color: var(--ink); background: var(--accent-sunk); }
+.menu-option::before {
+  content: ""; width: 4px; height: 4px; border-radius: 50%; flex: none;
+  background: transparent;
+}
+.menu-option[aria-selected="true"]::before { background: var(--accent); }
 
 .badge {
   display: inline-block; font: 500 9.5px/1.6 var(--mono); letter-spacing: 0.09em;
@@ -502,8 +578,15 @@ td.no { color: var(--ink-3); }
   padding: 0.5rem 0.6rem; border: 1px solid var(--hair-strong); border-radius: 6px;
   background: rgba(8, 10, 12, 0.95); font: 400 0.72rem/1.5 var(--mono); color: var(--ink-2);
 }
-.browser-head { display: flex; gap: 0.5rem; align-items: center; flex-wrap: wrap; margin-bottom: 0.7rem; }
-.filter-search { flex: 1 1 12rem; min-width: 9rem; font: 400 0.79rem/1.4 var(--mono); }
+.browser-head { display: flex; gap: 0.5rem; align-items: center; flex-wrap: wrap; margin-bottom: 0.8rem; }
+.filter-search {
+  flex: 1 1 12rem; min-width: 9rem; font-family: var(--mono); font-size: 0.78rem;
+}
+/* Tab strip gets its own band, so the figure caption below it can breathe. */
+.structure-toolbar {
+  display: flex; align-items: center; gap: 0.85rem; flex-wrap: wrap;
+  padding-bottom: 1.35rem; margin-bottom: 1.6rem; border-bottom: 1px solid var(--hair);
+}
 .candidate-list {
   display: flex; flex-direction: column; max-height: 21rem; overflow-y: auto;
   border: 1px solid var(--hair); border-radius: 8px; background: var(--panel);

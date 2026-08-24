@@ -59,13 +59,13 @@
     var resizeObserver = null;
     var globeController = null;
     var barsController = null;
+    var menuController = null;
     var unsubscribeSelection = null;
     var useWebglGlobe = global.KEYHOLE.globe.supported();
 
     /* ------------------------------------------------------------- controls */
     var chooser = node("div", "browser-head");
-    var chooserLabel = node("label", "fig-hint", "Candidate peptide");
-    chooserLabel.setAttribute("for", "atlas-candidate");
+    var chooserLabel = node("span", "fig-hint", "Candidate peptide");
     var selector = node("select", "");
     selector.id = "atlas-candidate";
     selector.setAttribute("aria-label", "Choose peptide for population coverage");
@@ -405,6 +405,9 @@
         ]);
         if (cell.visible) { row.classList.add("is-selected"); }
       });
+      /* Keep the enhanced menu trigger truthful however the value was set, including the
+         programmatic adoption of a selection published before this module subscribed. */
+      if (menuController) { menuController.sync(); }
       caveat.textContent = population.meta.assumption + " Seed " + population.meta.seed + "; " +
         population.meta.draws + " draws. ALL_OBSERVED is cohort-weighted, not worldwide coverage. " +
         "SAS is absent; unmodeled HLA alleles are unknown, not invisible.";
@@ -496,11 +499,13 @@
       if (unsubscribeSelection) { unsubscribeSelection(); unsubscribeSelection = null; }
       if (globeController) { globeController.destroy(); globeController = null; }
       if (barsController) { barsController.destroy(); barsController = null; }
+      if (menuController) { menuController.destroy(); menuController = null; }
       container.replaceChildren();
     }
 
     try {
       selector.addEventListener("change", updateEvidence);
+      menuController = UI.selectMenu(selector);
       resetGlobeButton.addEventListener("click", resetGlobe);
       canvas.addEventListener("pointerdown", pointerDown);
       canvas.addEventListener("pointermove", pointerMove);
@@ -544,7 +549,9 @@
           if (!state.candidateKey || keys.indexOf(state.candidateKey) === -1) { return; }
           if (selector.value === state.candidateKey) { return; }
           selector.value = state.candidateKey;
-          updateEvidence();
+          /* Dispatching change keeps the enhanced menu label and updateEvidence in step
+             from one place. The handler tags its own selection origin, so no loop. */
+          selector.dispatchEvent(new Event("change", { bubbles: true }));
         });
         /* Adopt any selection published before this module subscribed. */
         var initial = selection.get().candidateKey;
