@@ -6,4 +6,10 @@ __pycache__/
 build/
 dist/
 out.html
+demo.html
+demo.json
+r1.html
+r1.json
+r2.html
+r2.json
 .DS_Store
