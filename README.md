@@ -4,7 +4,7 @@
 
 **Reads a real tumour mutation file. Tells you which mutations the immune system could actually see. Shows its work.**
 
-[Live report](https://nodaylight.github.io/keyhole-immunology/) · [Quickstart](#quickstart) · [What the numbers mean](#what-the-numbers-mean) · [Built with Kiro](#built-with-kiro) · [Decisions](DECISIONS.md)
+[Quickstart](#quickstart) · [What the numbers mean](#what-the-numbers-mean) · [Prebuilt report](docs/index.html) · [Built with Kiro](#built-with-kiro) · [Decisions](DECISIONS.md)
 
 ![Python 3.11](https://img.shields.io/badge/python-3.11-3776AB?logo=python&logoColor=white)
 ![Offline](https://img.shields.io/badge/runtime-zero%20network%20requests-3fb950)
@@ -39,8 +39,8 @@ python3.11 -m venv .venv && .venv/bin/pip install .
 .venv/bin/keyhole open out.html
 ```
 
-Nothing to install? Open [the live report](https://nodaylight.github.io/keyhole-immunology/),
-which is the committed deterministic build of that same command.
+Nothing to install? [`docs/index.html`](docs/index.html) is the committed deterministic build of
+that same command. Download the raw file and open it in any browser.
 
 <table>
 <tr>
