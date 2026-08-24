@@ -241,10 +241,147 @@
     return wrapper;
   }
 
+  /*
+   * Native <details> elements snap open, which breaks the reading rhythm of a long report.
+   * This adds a height transition and an SVG plus-to-minus morph without changing how any
+   * disclosure behaves:
+   *
+   *   - `open` is still the single source of truth, and the `toggle` event still fires, so
+   *     scene.js keeps rebuilding its SVG fallback and funnel.js keeps forcing panels open.
+   *   - Programmatic `.open = true/false` assignments are deliberately left un-animated.
+   *     They are state synchronisation, not a reader gesture.
+   *   - One delegated click listener and one observer cover every disclosure, including the
+   *     ones funnel.js and the structure tabs recreate, so nothing has to opt in.
+   *   - Under reduced motion, or if anything throws, the native behaviour runs untouched.
+   */
+  var DISCLOSURE_OPEN_MS = 340;
+  var DISCLOSURE_CLOSE_MS = 260;
+  var DISCLOSURE_EASING = "cubic-bezier(0.32, 0.72, 0, 1)";
+
+  function disclosureIcon() {
+    var icon = svg("svg", {
+      class: "disc", viewBox: "0 0 14 14", "aria-hidden": "true", focusable: "false"
+    });
+    icon.appendChild(svg("line", { class: "disc-bar disc-h", x1: 2.6, y1: 7, x2: 11.4, y2: 7 }));
+    icon.appendChild(svg("line", { class: "disc-bar disc-v", x1: 7, y1: 2.6, x2: 7, y2: 11.4 }));
+    return icon;
+  }
+
+  function enhanceDisclosures(root) {
+    var scope = root || document;
+    var animations = new WeakMap();
+    var observer = null;
+
+    function prefersReducedMotion() {
+      return Boolean(
+        global.matchMedia && global.matchMedia("(prefers-reduced-motion: reduce)").matches
+      );
+    }
+
+    function addIcon(summary) {
+      if (summary.dataset.discIcon === "1") { return; }
+      summary.dataset.discIcon = "1";
+      summary.insertBefore(disclosureIcon(), summary.firstChild);
+    }
+
+    function addIcons(container) {
+      if (container.nodeType !== 1) { return; }
+      if (container.matches && container.matches("details > summary")) { addIcon(container); }
+      var found = container.querySelectorAll ?
+        container.querySelectorAll("details > summary") : [];
+      Array.prototype.forEach.call(found, addIcon);
+    }
+
+    /* Always restore the element to natural height, so late-growing content never clips. */
+    function release(details) {
+      animations.delete(details);
+      details.style.removeProperty("height");
+      details.style.removeProperty("overflow");
+      details.style.removeProperty("will-change");
+    }
+
+    function run(details, from, to, duration, done) {
+      var existing = animations.get(details);
+      if (existing) { existing.cancel(); }
+      details.style.overflow = "hidden";
+      details.style.willChange = "height";
+      var animation;
+      try {
+        animation = details.animate(
+          [{ height: from + "px" }, { height: to + "px" }],
+          { duration: duration, easing: DISCLOSURE_EASING }
+        );
+      } catch (error) {
+        release(details);
+        if (done) { done(); }
+        return;
+      }
+      animations.set(details, animation);
+      animation.onfinish = function () {
+        if (animations.get(details) !== animation) { return; }
+        release(details);
+        if (done) { done(); }
+      };
+      animation.oncancel = function () {
+        if (animations.get(details) === animation) { release(details); }
+      };
+    }
+
+    function clicked(event) {
+      if (event.defaultPrevented || event.button !== 0) { return; }
+      if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) { return; }
+      var summary = event.target.closest ? event.target.closest("summary") : null;
+      if (!summary) { return; }
+      var details = summary.parentElement;
+      if (!details || details.tagName !== "DETAILS" || !scope.contains(details)) { return; }
+      if (prefersReducedMotion() || typeof details.animate !== "function") { return; }
+
+      var start = details.offsetHeight;
+      if (details.open) {
+        event.preventDefault();
+        var collapsed = summary.offsetHeight;
+        run(details, start, collapsed, DISCLOSURE_CLOSE_MS, function () {
+          details.open = false;
+        });
+      } else {
+        /* Let the browser open it first so the real content height can be measured. */
+        details.open = true;
+        var full = details.offsetHeight;
+        run(details, start, full, DISCLOSURE_OPEN_MS);
+        event.preventDefault();
+      }
+    }
+
+    try {
+      addIcons(scope === document ? document.body : scope);
+      scope.addEventListener("click", clicked, true);
+      if (global.MutationObserver) {
+        observer = new global.MutationObserver(function (records) {
+          records.forEach(function (record) {
+            Array.prototype.forEach.call(record.addedNodes, addIcons);
+          });
+        });
+        observer.observe(scope === document ? document.body : scope, {
+          childList: true, subtree: true
+        });
+      }
+    } catch (error) {
+      if (observer) { observer.disconnect(); observer = null; }
+    }
+
+    return {
+      destroy: function () {
+        scope.removeEventListener("click", clicked, true);
+        if (observer) { observer.disconnect(); observer = null; }
+      }
+    };
+  }
+
   global.KEYHOLE = global.KEYHOLE || {};
   global.KEYHOLE.ui = Object.freeze({
     SVG_NS: SVG_NS,
     button: button,
+    enhanceDisclosures: enhanceDisclosures,
     figure: figure,
     fixed: fixed,
     metric: metric,

@@ -300,17 +300,36 @@ details {
   border: 1px solid var(--hair); border-radius: 7px; background: var(--panel);
   margin: 0.6rem 0;
 }
+details { transition: border-color 0.22s ease; }
+details:hover { border-color: var(--hair-strong); }
 summary {
   cursor: pointer; padding: 0.55rem 0.8rem; font-size: 0.8rem; color: var(--ink-2);
-  list-style: none; display: flex; align-items: center; gap: 0.5rem;
+  list-style: none; display: flex; align-items: center; gap: 0.55rem;
+  transition: color 0.2s ease, background-color 0.2s ease;
 }
 summary::-webkit-details-marker { display: none; }
-summary::before {
-  content: "+"; font-family: var(--mono); color: var(--ink-3); font-size: 0.95rem; line-height: 1;
-}
+summary::marker { content: ""; }
+summary:hover { color: var(--ink); }
 details[open] > summary { border-bottom: 1px solid var(--hair); color: var(--ink); }
-details[open] > summary::before { content: "\2212"; }
+
+/* Plus morphs into minus: the vertical stroke swings down onto the horizontal one. */
+.disc { width: 11px; height: 11px; flex: none; overflow: visible; color: var(--ink-3); }
+summary:hover .disc { color: var(--accent); }
+.disc-bar {
+  stroke: currentColor; stroke-width: 1.7; stroke-linecap: round;
+  transform-origin: 7px 7px;
+  transition: transform 0.34s cubic-bezier(0.32, 0.72, 0, 1);
+}
+details[open] > summary .disc { color: var(--accent); }
+details[open] > summary .disc-v { transform: rotate(90deg); }
+
+/* The revealed panel eases in, so an opening disclosure reads as one movement. */
 .fig-data-body, details > div, details > ul { padding: 0.8rem; }
+details[open] > *:not(summary) { animation: disclose 0.34s cubic-bezier(0.32, 0.72, 0, 1) both; }
+@keyframes disclose {
+  from { opacity: 0; transform: translateY(-3px); }
+  to { opacity: 1; transform: none; }
+}
 details > ul { margin: 0; padding-left: 2rem; }
 
 /* ------------------------------------------------------------- 3D viewport */

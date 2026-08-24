@@ -294,6 +294,8 @@
         document.getElementById("methods-app"), results, results.literature
       ));
       controllers.push(activeRail());
+      /* Registered last so it also covers every disclosure the sections just created. */
+      controllers.push(UI.enhanceDisclosures(document));
 
       var destroyed = false;
       global.KEYHOLE.report = Object.freeze({

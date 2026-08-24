@@ -398,6 +398,57 @@ def test_figure_anatomy_forces_a_persistent_truth_label() -> None:
     assert "destroy: function () { listeners.length = 0; }" in source
 
 
+def test_disclosure_animation_never_takes_over_details_state() -> None:
+    """Animated disclosures must leave `open` and the `toggle` event authoritative."""
+
+    figure = (WEB / "figure.js").read_text(encoding="utf-8")
+    css = (WEB / "style.css").read_text(encoding="utf-8")
+    main = (WEB / "main.js").read_text(encoding="utf-8")
+
+    assert "function enhanceDisclosures(root)" in figure
+    assert "enhanceDisclosures: enhanceDisclosures" in figure
+    assert "controllers.push(UI.enhanceDisclosures(document));" in main
+
+    # One delegated listener and one observer cover disclosures created later, so the eight
+    # modules that build a <details> never have to opt in.
+    assert 'scope.addEventListener("click", clicked, true)' in figure
+    assert "global.MutationObserver" in figure
+    assert "observer.observe(" in figure
+    assert 'scope.removeEventListener("click", clicked, true)' in figure
+    assert "observer.disconnect()" in figure
+
+    # `open` stays the source of truth, so scene.js keeps rebuilding its SVG fallback and
+    # funnel.js keeps forcing panels open.
+    assert "details.open = true;" in figure
+    assert "details.open = false;" in figure
+
+    # Inline height must always be released, or late-growing content would stay clipped.
+    assert "function release(details)" in figure
+    assert 'details.style.removeProperty("height")' in figure
+    assert 'details.style.removeProperty("overflow")' in figure
+    assert "animation.onfinish" in figure and "animation.oncancel" in figure
+    assert "if (existing) { existing.cancel(); }" in figure
+
+    # Reduced motion and missing Web Animations both fall back to native behaviour.
+    assert "function prefersReducedMotion()" in figure
+    assert 'global.matchMedia("(prefers-reduced-motion: reduce)").matches' in figure
+    assert 'if (prefersReducedMotion() || typeof details.animate !== "function") { return; }' \
+        in figure
+
+    # Modifier-clicks and already-handled events are left alone.
+    assert "event.defaultPrevented" in figure
+    assert "event.metaKey || event.ctrlKey || event.shiftKey || event.altKey" in figure
+
+    # The marker is a real two-stroke SVG that morphs, not a swapped text character.
+    assert "function disclosureIcon()" in figure
+    assert 'class: "disc-bar disc-h"' in figure and 'class: "disc-bar disc-v"' in figure
+    assert 'summary.dataset.discIcon === "1"' in figure
+    assert 'content: "+"' not in css
+    assert "details[open] > summary .disc-v { transform: rotate(90deg); }" in css
+    assert "transform-origin: 7px 7px;" in css
+    assert "@keyframes disclose" in css
+
+
 def test_stylesheet_declares_one_accent_three_type_roles_and_motion_rules() -> None:
     css = (WEB / "style.css").read_text(encoding="utf-8")
     # Three type roles, declared once each.
