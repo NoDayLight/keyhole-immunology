@@ -11,6 +11,7 @@ from pathlib import Path
 import pytest
 
 from keyhole.bind import ALLELES, BindingPrediction
+from keyhole.data import pdb_path
 from keyhole.parse import parse_famous
 from keyhole.pipeline import screen_variants
 from keyhole.report import SCRIPT_ORDER, render_report, web_root, write_report
@@ -98,6 +99,40 @@ def test_report_embeds_valid_results_all_scenes_and_scripts_in_order() -> None:
     assert html.count("(function (global)") >= len(SCRIPT_ORDER)
 
 
+def test_report_pdb_payload_is_display_only_fixed_column_subset() -> None:
+    scenes = _payloads(render_report(_fixture()))["keyhole-scenes"]["structures"]
+    expected_source_sites = {"1HHK": 6_322, "3PWN": 7_133, "1AO7": 5_711}
+    for pdb_id, structure in scenes.items():
+        original = pdb_path(pdb_id).read_text(encoding="utf-8")
+        compact = structure["pdb_text"]
+        lines = compact.splitlines()
+        atom_lines = [line for line in lines if line.startswith("ATOM")]
+        retained_serials = {int(line[6:11]) for line in atom_lines}
+        assert atom_lines
+        assert all(line.startswith(("ATOM", "CONECT")) for line in lines)
+        assert all(line[21].strip() in structure["display_chains"] for line in atom_lines)
+        assert all(float(line[54:60]) > 0 for line in atom_lines)
+        assert all(line[17:20].strip() not in {"HOH", "WAT"} for line in atom_lines)
+        assert all(line[76:78].strip().upper() != "H" for line in atom_lines)
+        for line in atom_lines:
+            for coordinate in (line[30:38], line[38:46], line[46:54]):
+                assert re.fullmatch(r"\s*-?\d+\.\d{3}", coordinate)
+        for line in (value for value in lines if value.startswith("CONECT")):
+            serials = [
+                int(line[offset : offset + 5])
+                for offset in range(6, len(line), 5)
+                if line[offset : offset + 5].strip()
+            ]
+            assert serials and set(serials) <= retained_serials
+        assert structure["source_pdb_bytes"] == len(original.encode("utf-8"))
+        assert structure["embedded_pdb_bytes"] == len(compact.encode("utf-8"))
+        assert structure["embedded_pdb_bytes"] < structure["source_pdb_bytes"]
+        assert structure["source_selected_atom_sites"] == expected_source_sites[pdb_id]
+        assert "coordinates serialized at 3 decimals" in structure["report_pdb_subset"]
+    assert "ANISOU" in pdb_path("3PWN").read_text(encoding="utf-8")
+    assert "ANISOU" not in scenes["3PWN"]["pdb_text"]
+
+
 def test_report_is_network_free_single_file_with_defensive_csp() -> None:
     html = render_report(_fixture())
     assert "connect-src 'none'" in html
@@ -114,7 +149,7 @@ def test_report_is_network_free_single_file_with_defensive_csp() -> None:
         "credentials:",
     ):
         assert forbidden not in html
-    assert 2_000_000 <= len(html.encode("utf-8")) <= 6_000_000
+    assert 1_000_000 <= len(html.encode("utf-8")) <= 1_750_000
 
 
 def test_report_bytes_are_deterministic_and_json_script_is_escaped(tmp_path: Path) -> None:

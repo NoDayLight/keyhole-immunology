@@ -13,8 +13,9 @@ from pathlib import Path
 
 from keyhole.assets import packaged_directory
 from keyhole.bind import ALLELES
+from keyhole.data import pdb_path
 from keyhole.schema import Verdict, validate_results
-from keyhole.structure import schematic_peptide_scene, structure_payload
+from keyhole.structure import schematic_peptide_scene, structure_payload, summarize_pdb
 
 SCRIPT_ORDER = (
     "projection.js",
@@ -197,8 +198,96 @@ def _report_contract(document: Mapping[str, object]) -> dict[str, object]:
     return results
 
 
+def _compact_pdb_text(pdb_text: str, display_chains: set[str]) -> str:
+    """Serialize only browser-displayable PDB atoms and their retained explicit bonds."""
+
+    source_lines = pdb_text.splitlines()
+    candidates: list[tuple[str, tuple[str, ...], float, str]] = []
+    grouped: dict[tuple[str, ...], list[tuple[float, str]]] = {}
+    for line in source_lines:
+        if line[:6].strip() != "ATOM":
+            continue
+        padded = line.ljust(80)
+        chain = padded[21].strip() or "_"
+        residue = padded[17:20].strip()
+        supplied_element = padded[76:78].strip().upper()
+        atom_letters = "".join(character for character in padded[12:16] if character.isalpha())
+        element = supplied_element or (atom_letters[:1].upper() if atom_letters else "C")
+        if chain not in display_chains or residue in {"HOH", "WAT"} or element == "H":
+            continue
+        occupancy = float(padded[54:60].strip() or "0")
+        alternate = padded[16].strip()
+        site = (
+            chain,
+            padded[22:26],
+            padded[26],
+            residue,
+            padded[12:16].strip(),
+        )
+        candidates.append((padded, site, occupancy, alternate))
+        grouped.setdefault(site, []).append((occupancy, alternate))
+
+    displayed_sites: set[tuple[str, ...]] = set()
+    for site, alternatives in grouped.items():
+        blanks = [record for record in alternatives if not record[1]]
+        selected = min(blanks or alternatives, key=lambda record: (-record[0], record[1] or " "))
+        if selected[0] > 0:
+            displayed_sites.add(site)
+
+    atom_lines: list[str] = []
+    retained_serials: set[int] = set()
+    for padded, site, occupancy, _alternate in candidates:
+        if site not in displayed_sites or occupancy <= 0:
+            continue
+        x = float(padded[30:38])
+        y = float(padded[38:46])
+        z = float(padded[46:54])
+        if not all(math.isfinite(value) for value in (x, y, z)):
+            raise ValueError("report PDB compaction encountered non-finite coordinates")
+        retained_serials.add(int(padded[6:11]))
+        atom_lines.append(
+            f"{padded[:30]}{x:8.3f}{y:8.3f}{z:8.3f}{padded[54:80]}".rstrip()
+        )
+
+    conect_lines: list[str] = []
+    for line in source_lines:
+        if line[:6].strip() != "CONECT":
+            continue
+        serials = [
+            int(line[offset : offset + 5])
+            for offset in range(6, len(line), 5)
+            if line[offset : offset + 5].strip()
+        ]
+        if not serials or serials[0] not in retained_serials:
+            continue
+        connected = [serial for serial in serials[1:] if serial in retained_serials]
+        if connected:
+            conect_lines.append(
+                f"CONECT{serials[0]:5d}" + "".join(f"{serial:5d}" for serial in connected)
+            )
+    return "\n".join([*atom_lines, *conect_lines]) + "\n"
+
+
+def _report_structure_payload(pdb_id: str) -> dict[str, object]:
+    payload = structure_payload(pdb_id)
+    raw_text = str(payload["pdb_text"])
+    display_chains = {str(chain) for chain in payload["display_chains"]}
+    compact_text = _compact_pdb_text(raw_text, display_chains)
+    payload["source_pdb_bytes"] = len(raw_text.encode("utf-8"))
+    payload["source_selected_atom_sites"] = summarize_pdb(pdb_path(pdb_id)).selected_atom_sites
+    payload["embedded_pdb_bytes"] = len(compact_text.encode("utf-8"))
+    payload["report_pdb_subset"] = (
+        "display-chain positive-occupancy non-water non-hydrogen ATOM plus retained CONECT; "
+        "coordinates serialized at 3 decimals"
+    )
+    payload["pdb_text"] = compact_text
+    return payload
+
+
 def _scene_envelope(results: Mapping[str, object]) -> dict[str, object]:
-    structures = {pdb_id: structure_payload(pdb_id) for pdb_id in ("1HHK", "3PWN", "1AO7")}
+    structures = {
+        pdb_id: _report_structure_payload(pdb_id) for pdb_id in ("1HHK", "3PWN", "1AO7")
+    }
     schematics: dict[str, object] = {}
     mutations = results["mutations"]
     assert isinstance(mutations, list)

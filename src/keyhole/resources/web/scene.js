@@ -254,7 +254,8 @@
       items.push("Chain " + chain + ": " + role);
     });
     if (data.kind === "pdb" && prepared.source) {
-      items.push(prepared.source.stats.selectedAtomSites +
+      var sourceSites = Number(data.source_selected_atom_sites || prepared.source.stats.selectedAtomSites);
+      items.push(sourceSites +
         " selected atom sites; rendered view omits water, zero-occupancy atoms, and non-display chains");
     }
     return items;

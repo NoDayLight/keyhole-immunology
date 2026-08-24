@@ -14,7 +14,7 @@ python3.11 -m venv .venv && .venv/bin/pip install .
 .venv/bin/keyhole open out.html
 ```
 
-The second command produces one self-contained HTML file (about 2.6 MB): no server, sidecar, CDN, credentials, or runtime network request. A prebuilt deterministic SKCM report is also the [Pages-ready demo](docs/index.html).
+The second command produces one self-contained HTML file (about 1.4 MB): no server, sidecar, CDN, credentials, or runtime network request. A prebuilt deterministic SKCM report is also the [Pages-ready demo](docs/index.html).
 
 ## Commands
 
