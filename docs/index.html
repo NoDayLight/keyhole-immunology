@@ -365,9 +365,12 @@ details > ul { margin: 0; padding-left: 2rem; }
 .mol-overlay-id { color: var(--ink) !important; }
 .globe-canvas { display: block; cursor: grab; border-radius: 6px; }
 .globe-canvas.is-grabbing { cursor: grabbing; }
+/* The stage takes its width from the column, not from the canvas it contains. Leaving it
+   to shrink-to-fit made the two size each other in a loop and settle too small. */
 .globe-stage {
   border: 1px solid var(--hair); border-radius: 8px; background: var(--bg-sunken);
-  padding: 0.5rem; display: grid; place-items: center; min-height: 260px;
+  display: grid; place-items: center;
+  width: 100%; max-width: 520px; margin-inline: auto; padding: 0.4rem; min-height: 0;
 }
 .globe-stage:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 
@@ -412,12 +415,17 @@ details > ul { margin: 0; padding-left: 2rem; }
 /* Every interactive control shares one height and one transition, so a row of mixed
    controls sits on a single optical baseline instead of stepping up and down. */
 button, select, input {
-  font: inherit; font-size: 0.8rem; line-height: 1; color: var(--ink);
+  font: inherit; font-size: 0.8rem; color: var(--ink);
   background: var(--panel-2); border: 1px solid var(--hair-strong);
-  border-radius: 7px; min-height: var(--control-h); padding: 0 0.78rem;
+  border-radius: 7px;
   transition: background-color 0.18s ease, border-color 0.18s ease, color 0.18s ease;
 }
 button { cursor: pointer; }
+/* Control metrics belong to controls only. Applying them to every <button> crushed
+   multi-line buttons such as the candidate rows. */
+select, input, .btn, .seg-item, .chip, .menu-trigger {
+  min-height: var(--control-h); padding: 0 0.78rem; line-height: 1;
+}
 .btn, .seg-item, .chip, .menu-trigger {
   display: inline-flex; align-items: center; justify-content: center; gap: 0.4rem;
   white-space: nowrap;
@@ -594,27 +602,57 @@ td.no { color: var(--ink-3); }
   display: flex; align-items: center; gap: 0.85rem; flex-wrap: wrap;
   padding-bottom: 1.35rem; margin-bottom: 1.6rem; border-bottom: 1px solid var(--hair);
 }
-.candidate-list {
-  display: flex; flex-direction: column; max-height: 21rem; overflow-y: auto;
-  border: 1px solid var(--hair); border-radius: 8px; background: var(--panel);
+
+/* The funnel stacks three blocks; each needs its own vertical air so a tall card in
+   one row can never sit flush against the caption of the next. */
+.split + .split, .fig + .split, .split + .fig { margin-top: clamp(1.75rem, 3vw, 2.75rem); }
+.evidence + * { margin-top: 0; }
+.atlas-assumptions {
+  margin-top: clamp(1.5rem, 2.5vw, 2.25rem); padding-top: 1.25rem;
+  border-top: 1px solid var(--hair); max-width: var(--measure);
 }
+.atlas-assumptions h3 { margin-top: 0; }
+
+.candidate-list {
+  display: flex; flex-direction: column; max-height: 24rem; overflow-y: auto;
+  border: 1px solid var(--hair); border-radius: 8px; background: var(--panel);
+  scrollbar-width: thin;
+}
+/* Explicit grid areas, so auto-placement can never stack two cells into one row. */
 .candidate-row {
-  display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 0.15rem 1rem;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-rows: auto auto;
+  column-gap: 1rem; row-gap: 0.28rem;
   align-items: center; text-align: left; background: transparent; border: 0;
   border-bottom: 1px solid var(--hair); border-left: 2px solid transparent;
-  border-radius: 0; padding: 0.55rem 0.8rem; width: 100%;
+  border-radius: 0; padding: 0.7rem 0.9rem; width: 100%;
+  min-height: 0; line-height: 1.4;
+  /* Without this the flex column shrinks 38 rows to fit its own max-height, collapsing
+     each row to a fraction of its content and spilling text into the next one. */
+  flex: 0 0 auto;
 }
 .candidate-row:last-child { border-bottom: 0; }
 .candidate-row:hover { background: var(--panel-2); }
 .candidate-row[aria-selected="true"] { background: var(--accent-sunk); border-left-color: var(--accent); }
-.row-gene { font-size: 0.83rem; font-weight: 500; }
-.row-gene .change { color: var(--ink-3); font-weight: 400; margin-left: 0.35rem; }
-.row-seq { grid-column: 1; font-size: 0.78rem; color: var(--ink-2); }
-.row-meta {
-  grid-column: 2; grid-row: 1 / span 2; justify-self: end; text-align: right;
-  display: flex; flex-direction: column; gap: 0.2rem; align-items: flex-end;
+/* The peptide is the candidate's identity, so it leads; the gene is context beneath. */
+.row-seq {
+  grid-area: 1 / 1 / 2 / 2; min-width: 0;
+  font-size: 0.85rem; line-height: 1.3; letter-spacing: 0.12em; color: var(--ink);
 }
-.row-rank { font: 400 0.72rem/1.4 var(--mono); color: var(--ink-3); }
+.row-gene {
+  grid-area: 2 / 1 / 3 / 2; min-width: 0;
+  font-family: var(--sans); font-size: 0.755rem; line-height: 1.3;
+  font-weight: 500; color: var(--ink-2);
+}
+.row-gene .change { color: var(--ink-3); font-weight: 400; margin-left: 0.3rem; }
+.row-meta {
+  grid-area: 1 / 2 / 3 / 3; justify-self: end; text-align: right;
+  display: flex; flex-direction: column; gap: 0.3rem; align-items: flex-end;
+}
+.row-rank { font: 400 0.715rem/1.3 var(--mono); color: var(--ink-3); white-space: nowrap; }
+.candidate-row[aria-selected="true"] .row-seq { color: #fff; }
+.candidate-row[aria-selected="true"] .row-rank { color: var(--ink-2); }
 .evidence {
   border: 1px solid var(--hair); border-radius: 8px; background: var(--panel);
   padding: clamp(1rem, 2vw, 1.4rem);
@@ -3493,7 +3531,7 @@ globalThis.THREE=Object.freeze({ACESFilmicToneMapping:et,AmbientLight:xp,Box3:Di
     function measure() {
       var box = host.getBoundingClientRect();
       var available = Math.round(box.width || 520) - 16;
-      var side = Math.max(240, Math.min(460, available));
+      var side = Math.max(240, Math.min(520, available));
       width = side;
       height = side;
     }
@@ -5133,7 +5171,7 @@ globalThis.THREE=Object.freeze({ACESFilmicToneMapping:et,AmbientLight:xp,Box3:Di
     barsFig.addLegend("#8b949e", "hatched fill — heuristic approximation", "swatch-illustrative");
 
     /* --------------------------------------- exact serialized value tables */
-    var tables = node("div", "split");
+    var tables = node("div", "");
     var coverageBlock = node("div", "");
     coverageBlock.appendChild(node("h3", "", "Exact serialized population coverage"));
     var coverageTable = UI.table(
@@ -5146,8 +5184,10 @@ globalThis.THREE=Object.freeze({ACESFilmicToneMapping:et,AmbientLight:xp,Box3:Di
         "reported as zero. HLA alleles outside the 26-model panel are unknown, not invisible."
     );
     coverageBlock.appendChild(absence);
-    tables.appendChild(coverageBlock);
-    var assumptionBlock = node("div", "");
+    /* The exact numbers sit directly under the chart that plots them, which also stops
+       the right column from ending in a block of empty space. */
+    barsColumn.appendChild(coverageBlock);
+    var assumptionBlock = node("div", "atlas-assumptions");
     assumptionBlock.appendChild(node("h3", "", "How this coverage was computed"));
     tables.appendChild(assumptionBlock);
 

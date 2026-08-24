@@ -131,7 +131,7 @@
     barsFig.addLegend("#8b949e", "hatched fill — heuristic approximation", "swatch-illustrative");
 
     /* --------------------------------------- exact serialized value tables */
-    var tables = node("div", "split");
+    var tables = node("div", "");
     var coverageBlock = node("div", "");
     coverageBlock.appendChild(node("h3", "", "Exact serialized population coverage"));
     var coverageTable = UI.table(
@@ -144,8 +144,10 @@
         "reported as zero. HLA alleles outside the 26-model panel are unknown, not invisible."
     );
     coverageBlock.appendChild(absence);
-    tables.appendChild(coverageBlock);
-    var assumptionBlock = node("div", "");
+    /* The exact numbers sit directly under the chart that plots them, which also stops
+       the right column from ending in a block of empty space. */
+    barsColumn.appendChild(coverageBlock);
+    var assumptionBlock = node("div", "atlas-assumptions");
     assumptionBlock.appendChild(node("h3", "", "How this coverage was computed"));
     tables.appendChild(assumptionBlock);
 

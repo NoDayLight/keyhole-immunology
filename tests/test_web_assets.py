@@ -476,6 +476,51 @@ def test_controls_share_one_height_and_one_primary_action() -> None:
     assert "border-bottom: 1px solid var(--hair);" in css
     assert 'UI.node("div", "structure-toolbar")' in (WEB / "main.js").read_text(encoding="utf-8")
 
+    # Control metrics must not leak onto every <button>: the candidate rows are buttons
+    # with two lines of content, and line-height 1 plus a control min-height crushed them.
+    control_rule = css.split("button, select, input {", maxsplit=1)[1].split("}", maxsplit=1)[0]
+    assert "line-height" not in control_rule
+    assert "min-height" not in control_rule
+    assert "select, input, .btn, .seg-item, .chip, .menu-trigger {" in css
+
+
+def test_candidate_rows_cannot_collapse_or_overlap() -> None:
+    """The scrolling candidate list must never shrink or auto-place its rows."""
+
+    css = (WEB / "style.css").read_text(encoding="utf-8")
+    row = css.split(".candidate-row {", maxsplit=1)[1].split("}", maxsplit=1)[0]
+
+    # A flex column with a max-height shrinks its children unless they opt out.
+    assert "flex: 0 0 auto;" in row
+    assert "max-height: 24rem; overflow-y: auto;" in css
+    assert "min-height: 0;" in row
+    assert "line-height: 1.4;" in row
+
+    # Explicit areas, so no child can ever be auto-placed into another child's cell.
+    assert "grid-area: 1 / 1 / 2 / 2;" in css
+    assert "grid-area: 2 / 1 / 3 / 2;" in css
+    assert "grid-area: 1 / 2 / 3 / 3;" in css
+    assert "grid-template-rows: auto auto;" in row
+
+    # Every text cell states its own line height rather than inheriting a control's.
+    for selector in (".row-seq {", ".row-gene {"):
+        block = css.split(selector, maxsplit=1)[1].split("}", maxsplit=1)[0]
+        assert "line-height: 1.3;" in block, selector
+
+    # The globe stage takes its width from the column, not from the canvas inside it.
+    stage = css.split(".globe-stage {", maxsplit=1)[1].split("}", maxsplit=1)[0]
+    assert "width: 100%;" in stage and "max-width: 520px;" in stage
+    assert "Math.min(520, available)" in (WEB / "globe.js").read_text(encoding="utf-8")
+
+    # The exact coverage table sits with the chart that plots it, not in a dead column.
+    atlas = (WEB / "atlas.js").read_text(encoding="utf-8")
+    assert "barsColumn.appendChild(coverageBlock);" in atlas
+    assert 'node("div", "atlas-assumptions")' in atlas
+    assert ".atlas-assumptions {" in css
+
+    # Stacked blocks inside a section keep vertical air between them.
+    assert ".split + .split, .fig + .split, .split + .fig {" in css
+
 
 def test_select_menu_opens_below_and_keeps_the_native_select_authoritative() -> None:
     """The enhanced menu is a view over a real <select>, anchored under its trigger."""

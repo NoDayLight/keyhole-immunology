@@ -104,7 +104,7 @@
     function measure() {
       var box = host.getBoundingClientRect();
       var available = Math.round(box.width || 520) - 16;
-      var side = Math.max(240, Math.min(460, available));
+      var side = Math.max(240, Math.min(520, available));
       width = side;
       height = side;
     }
