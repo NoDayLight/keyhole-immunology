@@ -1,45 +1,144 @@
-# KEYHOLE demo video storyboard
+# KEYHOLE demo script
 
-Target 2:50. Record at 1440p or higher. Terminal text at least 20 px. Never crop a truth label,
-a method label, a caveat, a citation, or an audit count.
+Target 2:50. Narration is roughly 440 words, which lands at a normal speaking pace. Every number
+below comes from the exact command in "Before you record", so it will match what is on screen.
 
-Build the artifact before recording so nothing is generated on camera except the run you narrate:
+## Before you record
 
 ```sh
-SOURCE_DATE_EPOCH=1787529600 .venv/bin/keyhole screen \
-  --maf data/examples/tcga_skcm.maf --hla 'A*02:01,B*07:02' --report docs/index.html
+.venv/bin/keyhole screen --maf data/examples/tcga_skcm.maf \
+  --hla "A*29:02,A*30:02" --report /tmp/demo.html
 ```
+
+This scenario gives 2 clear, 7 faint, 29 invisible, which is a real story. The committed
+`docs/index.html` uses `A*02:01,B*07:02` and returns 38 invisible, which is truthful but flat.
+
+- Open `/tmp/demo.html` once and scroll the whole page before recording, so WebGL shaders compile
+  and the funnel has already run. Then reload for the take.
+- 1440p or higher. Browser at ~1500 px wide so the desktop layout with the left rail shows.
+- Terminal at 20 px or larger. Clear scrollback.
+- Notifications off. Hide bookmarks. Neutral wallpaper.
+- Two candidates to have ready in section 01: `IGDFGLATE` (fails) and `SQHMTEVVRH` (works).
 
 ## Shot list
 
-| Time | Picture | Voiceover |
-|---|---|---|
-| 0:00–0:12 | Cold open on the report's first fold. Rotate the 1HHK scene once with the mouse. | "This is a real crystal structure. The blue tubes are a human HLA molecule. The gold chain is a protein fragment sitting in its groove, which is how your immune system checks a cell from the inside." |
-| 0:12–0:30 | Cut to terminal. `.venv/bin/keyhole validate`. Hold on the reproduced metrics line. | "Cancer alters those fragments. KEYHOLE reads a real tumour mutation file and asks which altered fragments a given set of HLA molecules could actually display. Twenty-six allele-specific models ship inside the package. Validation reproduces held-out Spearman and censor-aware ROC AUC from frozen data, with no network and no retraining." |
-| 0:30–0:50 | Run the `screen` command on `data/examples/tcga_skcm.maf`. Highlight 100 rows, 89 supported, 2 screenable, 87 missing context, 38 candidates. Then the audit ladder in the report. | "One hundred real TCGA rows in. Eighty-seven are dropped because KEYHOLE has no frozen canonical protein context for them. It counts what it discarded instead of inventing a sequence, and the same four numbers appear in the report." |
-| 0:50–1:00 | Report first fold. Point at the 0 / 0 / 38 verdict strip, then the two truth-boundary callouts. | "Binding is measured-data machine learning. Processing, foreignness, verdicts, and population coverage are labelled heuristic approximations. The HLA alleles are a command-line input, not a patient genotype." |
-| 1:00–1:35 | Section 01. Press *Replay candidate flow* and let it run. Then hover one particle. Then click three candidates in the list. | "Thirty-eight candidates, one particle each, four inspection gates. Eight stop at the proteasome, five at the TAP channel, sixteen at the HLA groove, nine reach the final check. Those counts are tallies of reason codes that Python already wrote. The browser never re-applies a threshold. It can explain a rejection; it cannot decide one." |
-| 1:35–1:55 | The gate ladder and the radar for one selected candidate. Point at the red axis, then a grey value. | "Every gate prints its exact serialized value and the method that produced it. The red axis is the gate whose reason code stopped this candidate. Grey means the pipeline never reached that gate, so the number exists but no decision was made. The radar is a profile, not a score, and its axis domains are in the table underneath." |
-| 1:55–2:15 | Section 02. Drag the globe. Then the bar chart, then the exact coverage table. | "Coverage uses real AFR, AMR, EAS and EUR frequencies under stated linkage-equilibrium and Hardy-Weinberg assumptions. The geography is decoration. The aggregate is cohort-weighted and never drawn as a place, South Asian data is reported absent rather than zero, and hatched fill means heuristic throughout." |
-| 2:15–2:35 | Section 03. Switch to the 1AO7 tab, rotate, then switch to *All displayed atoms*. Then back to a candidate scene. | "Five thousand four hundred and seventy-six measured atoms, five chains, including both T-cell receptor chains. Nothing is moved to make the picture look better. Candidate scenes are labelled real backbone with illustrative side-chain geometry, and the illustrative atom is drawn translucent so you can't mistake it for a measured one." |
-| 2:35–2:50 | Section 04 strata table. Then open DevTools Network, reload the `file:` URL, show it empty. End on *What KEYHOLE refuses to claim*. | "Published T-cell positivity and KEYHOLE visibility are different endpoints, stratified by whether the peptide was in the training data, with every denominator shown. Shuffled controls are synthetic, never assayed negatives. One file, no server, zero requests. It explains visibility. It does not diagnose, recommend treatment, or prove immunogenicity." |
+### 0:00 to 0:14 — Cold open, no title card
+
+**Do:** Start on the report's first fold. Drag the hero molecule through one slow rotation.
+
+**Say:** "That's a real crystal structure. The blue tubes are a human HLA molecule. The gold chain
+is a protein fragment sitting in its groove. This is how your immune system inspects a cell from
+the inside."
+
+### 0:14 to 0:34 — Terminal, validate
+
+**Do:** Cut to terminal. Run `.venv/bin/keyhole validate`. Hold on the metrics line.
+
+**Say:** "Cancer mutations corrupt some of those fragments. KEYHOLE reads a real tumour file and
+works out which corrupted fragments a given set of HLA molecules could actually display.
+Twenty-six binding models ship inside the package. Validation reproduces held-out Spearman and
+censor-aware ROC AUC from frozen data. No network, no retraining."
+
+**On screen:** `spearman=0.7376983698471881`, `roc_auc_500nm=0.9313744947688023`.
+
+### 0:34 to 0:56 — Terminal, screen, then the audit ladder
+
+**Do:** Run the screen command. Let the summary line land. Cut to the report's audit ladder and
+track down the four numbers.
+
+**Say:** "One hundred real TCGA melanoma rows. Eighty-seven get dropped, because KEYHOLE has no
+frozen canonical protein sequence for those genes. It counts what it threw away instead of
+inventing a sequence to fill the gap. Two variants survive and produce thirty-eight peptide
+candidates. The report repeats the same four numbers."
+
+**On screen:** `input_rows=100 supported_changes=89 screenable=2 missing_canonical_context=87`,
+then 100 / 89 / 2 / 38 in the ladder.
+
+### 0:56 to 1:40 — The funnel, and two candidates
+
+**Do:** Section 01. Press *Replay candidate flow*, let it finish. Then click `IGDFGLATE`, pause on
+the gate ladder. Then click `SQHMTEVVRH` and pause again.
+
+**Say:** "Thirty-eight candidates. One particle each. Four gates. Eight stop at the proteasome,
+five at the TAP channel, sixteen at the HLA groove, nine reach the final check. Those are tallies
+of reason codes Python already wrote. The browser never re-applies a threshold, so it can explain
+a rejection but it cannot decide one.
+
+Here is one that fails. TAP transport is 0.327, and that gate is red. Everything below it is grey,
+because the pipeline stopped and never evaluated those gates. The number exists. The decision does
+not.
+
+And here is one that works. From TP53 R175H. Rank 0.94 percent, 104 nanomolar, foreignness 0.238.
+And it binds seventeen times better than the wild-type sequence, which is the interesting part.
+The mutation is what created the fit."
+
+**On screen:** attrition `38 in / 8 stopped`, `30 / 5`, `25 / 16`, `9 / 0`. Then `IGDFGLATE` with a
+red TAP row at 0.327 and grey values beneath. Then `SQHMTEVVRH`, `VISIBLE CLEAR`, `A*30:02 0.94%
+rank · 104.4 nM`, `17.04x`, reason codes `STRONG_BINDING, FOREIGN_LIKE, MUTANT_BINDS_BETTER`.
+
+### 1:40 to 2:05 — Population coverage
+
+**Do:** Section 02, already showing `SQHMTEVVRH`. Drag the globe once. Move to the bar chart.
+
+**Say:** "Same candidate, different question. Who else could display it? Thirty-seven percent of
+the African cohort, fifty-two of the American, twenty-one East Asian, thirty-eight European. Real
+observed frequencies. Hatched fill means heuristic. The aggregate is a cohort weighting and it is
+never drawn on the globe, because it is not a place. South Asian data is reported absent, not
+zero."
+
+**On screen:** AFR 37.47, AMR 52.40, EAS 20.67, EUR 38.28, ALL_OBSERVED 35.64, and the SAS note
+under the coverage table.
+
+### 2:05 to 2:25 — Measured structures
+
+**Do:** Section 03. Click *A T cell reading the card*, rotate once, then *All displayed atoms*.
+Finish on a candidate scene from section 01.
+
+**Say:** "Back to measured coordinates. This is 1AO7, a T-cell receptor reading a peptide-HLA
+complex. Five thousand four hundred and seventy-six atoms, five chains, both receptor chains
+distinguished. Nothing is moved to make the picture look better. Candidate geometry gets a
+separate label and is drawn translucent, so it cannot pass for a measurement."
+
+**On screen:** the five-chain legend, `5476 displayed atom positions`, then the illustrative truth
+label on the candidate scene.
+
+### 2:25 to 2:50 — Reality check, offline proof, close
+
+**Do:** Section 04 strata table. Then open DevTools Network and reload the `file:` URL. Land on
+*What KEYHOLE refuses to claim*.
+
+**Say:** "Last question. Does any of this agree with reality? Nine published T-cell positives,
+eight called visible. Stratified by whether the peptide was in the training data, with every
+denominator shown. The shuffled controls are synthetic. They are not assayed negatives, and the
+report says so.
+
+One file. No server. Watch the network panel. Nothing.
+
+It explains visibility. It does not diagnose, recommend treatment, or prove immunogenicity."
+
+**On screen:** `8 / 9`, the three exposure strata, an empty network panel next to a `file://` URL,
+then the refusal list.
 
 ## Optional 15-second Kiro coda
 
-Show `.kiro/specs/` with eighteen spec folders, open `r8-presentation-grade-report/requirements.md`,
-then `.kiro/steering/invariants.md`.
+**Do:** `.kiro/specs/` with 18 folders, open `r8-presentation-grade-report/requirements.md`, then
+`.kiro/steering/invariants.md`.
 
-"Eighteen spec boundaries, each with requirements, design and tasks, plus four steering files
-that Kiro applied to every turn. Invariant two is why every 3D scene in this report carries a
-truth label."
+**Say:** "Eighteen spec boundaries. Each has requirements, design and tasks, and closes with a
+decision entry. Four steering files applied on every turn. Law two is why every 3D scene in this
+report carries a truth label. Law seven is why coverage covers four populations instead of five."
 
-## Recording checklist
+## Do not say
 
-- Use the fixed-epoch build so on-screen values match the committed `docs/index.html`.
-- Show the `file:` URL at least once, and keep the network panel visible during one reload.
-- Demonstrate drag, wheel zoom, arrow keys, and `Home` on one molecular scene.
-- Toggle the OS reduced-motion setting once and show the static evidence path.
-- Say "measured-data machine learning" and "heuristic approximation" in full. Never shorten
-  either to "measured" or "prediction".
-- Never call synthetic decoys negatives, coverage worldwide, or illustrative geometry structure.
-- Close on the non-clinical limitation.
+- "Measured" on its own when you mean "measured-data machine learning".
+- "Negatives" for the shuffled controls. They are synthetic decoys with no assay.
+- "Worldwide" or "global" for `ALL_OBSERVED`.
+- "Structure" or "prediction" for the illustrative candidate geometry.
+- Any phrasing that implies a patient. The HLA alleles are a command-line input.
+
+## Do show
+
+- A `file://` URL at least once, with the network panel visible during a reload.
+- Drag, wheel zoom, an arrow key, and `Home` on one molecular scene.
+- The OS reduced-motion toggle once, so the static evidence path is on camera.
+- At least one truth label held long enough to read.
