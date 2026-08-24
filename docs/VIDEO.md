@@ -17,6 +17,13 @@ clear
 Big terminal font, notifications off. Do one silent practice run so you know where the report's
 sections are, then delete `demo.html` again and record for real.
 
+**If a command ever takes over the screen and you cannot type:** press `q`. If nothing happens,
+press `Ctrl+C` then `q`. Nothing in this script needs that, because every command prints its output
+and returns to the prompt on its own.
+
+**To start over at any point:** `rm -f demo.html demo.json && clear`, then begin again from 0:00.
+Nothing is left behind and nothing outside this folder changes.
+
 ---
 
 # PART 1 — TERMINAL
@@ -77,11 +84,11 @@ tail -n +3 data/examples/tcga_skcm.maf | cut -f8 | sort | uniq -c
 
 ```sh
 ls -lh demo.json demo.html
-less demo.json
+grep -B 2 -A 27 '"candidate_key": "SQHMTEVVRH"' demo.json
 ```
 
-Inside `less`: type `/SQHMTEVVRH`, press Enter, then press `k` twice. The whole candidate is on one
-screen. Press `q` to quit.
+That prints the whole candidate, 30 lines, and drops you straight back at the prompt. No pager, no
+keys to remember, and the output stays on screen while you talk over it.
 
 **Say:**
 
