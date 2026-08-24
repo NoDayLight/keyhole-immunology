@@ -411,6 +411,21 @@
       renderBars();
       if (globeController) { globeController.setCoverage(currentCoverage); }
       drawGlobe();
+      /* An all-zero candidate is a real result, not a failed render. Say so on the globe
+         as well as on the bar chart, so an empty-looking figure is never ambiguous. */
+      var allZero = POPULATIONS.every(function (name) {
+        return Number(currentCoverage[name]) === 0;
+      });
+      if (allZero) {
+        globeStatus.textContent =
+          "Every serialized cohort value for this candidate is exactly 0%, so the markers show " +
+          "cohort locations at their base size and none of them grows. No sampled genotype in " +
+          "any observed cohort carries a modeled allele that displays this candidate.";
+      } else if (globeController) {
+        globeStatus.textContent =
+          "Marker size is a bounded display scale over the serialized cohort coverage printed " +
+          "below. The smallest dot is a location anchor, not a value.";
+      }
       if (selection) {
         var index = keys.indexOf(currentKey);
         if (index !== -1) { selection.set(selection.get().index, currentKey, "atlas"); }

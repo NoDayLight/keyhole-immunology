@@ -3009,8 +3009,14 @@ globalThis.THREE=Object.freeze({ACESFilmicToneMapping:et,AmbientLight:xp,Box3:Di
     { cohort: "EAS", location: [35.0, 112.0], color: [0.40, 0.76, 0.85] },
     { cohort: "EUR", location: [51.5, 12.0], color: [0.64, 0.58, 0.87] }
   ];
-  var BASE_MARKER_SIZE = 0.022;
-  var MAX_MARKER_SIZE = 0.085;
+  /*
+   * The base size is a *location* anchor, not a value. A cohort exists whether or not
+   * this candidate has any coverage in it, so a 0% cohort still shows a legible dot and
+   * the reader can tell the difference between "zero here" and "nothing rendered".
+   * Coverage is encoded only in the growth above that floor.
+   */
+  var BASE_MARKER_SIZE = 0.038;
+  var MAX_MARKER_SIZE = 0.095;
   var SPIN_RADIANS_PER_FRAME = 0.0026;
 
   var probe = null;
@@ -4014,7 +4020,24 @@ globalThis.THREE=Object.freeze({ACESFilmicToneMapping:et,AmbientLight:xp,Box3:Di
     analysisWrap.appendChild(sceneHost);
     container.appendChild(analysisWrap);
 
-    var selected = 0;
+    /*
+     * Open on the first candidate this report calls visible, in serialized order, falling
+     * back to the first candidate when nothing is visible. Every candidate stays listed in
+     * serialized order and the headline counts are unchanged; this only decides which row
+     * is highlighted on load. Landing on a rejected candidate made the coverage figure
+     * below read as a broken render rather than as a real 0% result.
+     */
+    function initialSelection() {
+      var order = ["VISIBLE_CLEAR", "VISIBLE_FAINT"];
+      for (var tier = 0; tier < order.length; tier += 1) {
+        for (var index = 0; index < candidates.length; index += 1) {
+          if (candidates[index].peptide.verdict === order[tier]) { return index; }
+        }
+      }
+      return 0;
+    }
+
+    var selected = initialSelection();
     var filterVerdict = "ALL";
     var queryText = "";
 
@@ -4993,6 +5016,21 @@ globalThis.THREE=Object.freeze({ACESFilmicToneMapping:et,AmbientLight:xp,Box3:Di
       renderBars();
       if (globeController) { globeController.setCoverage(currentCoverage); }
       drawGlobe();
+      /* An all-zero candidate is a real result, not a failed render. Say so on the globe
+         as well as on the bar chart, so an empty-looking figure is never ambiguous. */
+      var allZero = POPULATIONS.every(function (name) {
+        return Number(currentCoverage[name]) === 0;
+      });
+      if (allZero) {
+        globeStatus.textContent =
+          "Every serialized cohort value for this candidate is exactly 0%, so the markers show " +
+          "cohort locations at their base size and none of them grows. No sampled genotype in " +
+          "any observed cohort carries a modeled allele that displays this candidate.";
+      } else if (globeController) {
+        globeStatus.textContent =
+          "Marker size is a bounded display scale over the serialized cohort coverage printed " +
+          "below. The smallest dot is a location anchor, not a value.";
+      }
       if (selection) {
         var index = keys.indexOf(currentKey);
         if (index !== -1) { selection.set(selection.get().index, currentKey, "atlas"); }

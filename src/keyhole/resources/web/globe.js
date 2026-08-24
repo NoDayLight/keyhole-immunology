@@ -16,8 +16,14 @@
     { cohort: "EAS", location: [35.0, 112.0], color: [0.40, 0.76, 0.85] },
     { cohort: "EUR", location: [51.5, 12.0], color: [0.64, 0.58, 0.87] }
   ];
-  var BASE_MARKER_SIZE = 0.022;
-  var MAX_MARKER_SIZE = 0.085;
+  /*
+   * The base size is a *location* anchor, not a value. A cohort exists whether or not
+   * this candidate has any coverage in it, so a 0% cohort still shows a legible dot and
+   * the reader can tell the difference between "zero here" and "nothing rendered".
+   * Coverage is encoded only in the growth above that floor.
+   */
+  var BASE_MARKER_SIZE = 0.038;
+  var MAX_MARKER_SIZE = 0.095;
   var SPIN_RADIANS_PER_FRAME = 0.0026;
 
   var probe = null;

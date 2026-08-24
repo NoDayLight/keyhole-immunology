@@ -267,6 +267,18 @@ def test_globe_uses_only_four_observed_cohorts_and_never_maps_the_aggregate() ->
 
     assert "Editorial centroids" in globe
     assert "not measured locations" in globe
+
+    # A 0% cohort must stay locatable. The base marker size is a location anchor, and both
+    # the globe and the bar figure must say so when every serialized value is zero, so an
+    # honest all-zero result can never be mistaken for a failed render.
+    assert "location* anchor, not a value" in globe or "location anchor" in globe
+    assert "Coverage is encoded only in the growth above that floor." in globe
+    assert "BASE_MARKER_SIZE = 0.038" in globe
+    assert "value <= 0) { return BASE_MARKER_SIZE; }" in globe
+    assert "Every serialized cohort value for this candidate is exactly 0%" in atlas
+    assert atlas.count("Every serialized cohort value for this candidate is exactly 0%") == 2
+    assert "not a failed render" in atlas
+    assert "The smallest dot is a location anchor, not a value." in atlas
     assert "function markerSize(percent)" in globe
     assert "BASE_MARKER_SIZE" in globe and "MAX_MARKER_SIZE" in globe
     assert "Math.min(1, value / 60)" in globe
@@ -351,6 +363,19 @@ def test_funnel_gate_ladder_reads_reason_codes_without_any_comparison() -> None:
     # One witness particle per serialized candidate, still seeded and deterministic.
     assert "particles = buildParticles(candidates, results.meta.seed)" in source
     assert "candidates.push" in source
+
+    # The initial highlight is deterministic: first visible candidate in serialized order,
+    # falling back to the first candidate. It changes which row opens selected and nothing
+    # else, and it never reorders or filters the list.
+    assert "function initialSelection()" in source
+    assert 'var order = ["VISIBLE_CLEAR", "VISIBLE_FAINT"];' in source
+    assert "return index; }" in source
+    assert "return 0;" in source
+    assert "var selected = initialSelection();" in source
+    initial = source.split("function initialSelection()", maxsplit=1)[1].split(
+        "var selected =", maxsplit=1
+    )[0]
+    assert "sort" not in initial and "filter" not in initial and "splice" not in initial
 
     # The radar axes are labelled as display normalisations, not a composite score.
     assert "not a composite score" in source

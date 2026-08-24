@@ -446,7 +446,24 @@
     analysisWrap.appendChild(sceneHost);
     container.appendChild(analysisWrap);
 
-    var selected = 0;
+    /*
+     * Open on the first candidate this report calls visible, in serialized order, falling
+     * back to the first candidate when nothing is visible. Every candidate stays listed in
+     * serialized order and the headline counts are unchanged; this only decides which row
+     * is highlighted on load. Landing on a rejected candidate made the coverage figure
+     * below read as a broken render rather than as a real 0% result.
+     */
+    function initialSelection() {
+      var order = ["VISIBLE_CLEAR", "VISIBLE_FAINT"];
+      for (var tier = 0; tier < order.length; tier += 1) {
+        for (var index = 0; index < candidates.length; index += 1) {
+          if (candidates[index].peptide.verdict === order[tier]) { return index; }
+        }
+      }
+      return 0;
+    }
+
+    var selected = initialSelection();
     var filterVerdict = "ALL";
     var queryText = "";
 
