@@ -1,171 +1,250 @@
-# PROJECT KEYHOLE
+<div align="center">
 
-Every cell displays fragments of its own proteins like ID cards for immune inspection; cancer corrupts some of those cards. KEYHOLE reads supported variants from a real tumor file and produces a single, inspectable report showing which mutation-derived peptide cards may be visible through the supplied HLA keyholes.
+# KEYHOLE
 
-KEYHOLE is a deterministic, offline-after-install comprehension tool—not a clinical predictor. Its report combines measured-data binding ML with explicitly labeled heuristic approximations, real frozen population marginals, published-positive assay context, and truth-labeled molecular scenes.
+**Reads a real tumour mutation file. Tells you which mutations the immune system could actually see. Shows its work.**
 
-## Quickstart (three commands)
+[Live report](https://nodaylight.github.io/keyhole-immunology/) · [Quickstart](#quickstart) · [What the numbers mean](#what-the-numbers-mean) · [Built with Kiro](#built-with-kiro) · [Decisions](DECISIONS.md)
 
-Requires **CPython 3.11**. From this repository:
+![Python 3.11](https://img.shields.io/badge/python-3.11-3776AB?logo=python&logoColor=white)
+![Offline](https://img.shields.io/badge/runtime-zero%20network%20requests-3fb950)
+![Deterministic](https://img.shields.io/badge/output-byte--identical-5b9dff)
+![Tests](https://img.shields.io/badge/tests-92%20passing-3fb950)
+![Not for clinical use](https://img.shields.io/badge/not%20for-clinical%20use-f85149)
+
+<img src="docs/media/hero.webp" alt="KEYHOLE report: the headline question, a 2 / 7 / 29 verdict split, and a WebGL view of a peptide bound in an HLA groove" width="100%">
+
+</div>
+
+## About
+
+Cells display fragments of their own proteins on HLA molecules so T cells can inspect them from
+the inside. Cancer mutations corrupt some of those fragments. Whether a corrupted one ever
+reaches the surface depends on four steps, and KEYHOLE scores each one separately.
+
+Binding comes from 26 allele-specific PyTorch models trained on 95,441 frozen IEDB affinity
+measurements, split by peptide. Everything else is a labelled heuristic, and the report says
+which is which next to every number.
+
+The output is one HTML file. No server, no CDN, no network request, and byte-identical across
+runs.
+
+## Quickstart
+
+Requires **CPython 3.11**. Roughly two minutes, most of it PyTorch downloading.
 
 ```sh
 python3.11 -m venv .venv && .venv/bin/pip install .
-.venv/bin/keyhole screen --maf data/examples/tcga_skcm.maf --hla 'A*02:01,B*07:02' --report out.html
+.venv/bin/keyhole screen --maf data/examples/tcga_skcm.maf --hla 'A*29:02,A*30:02' --report out.html
 .venv/bin/keyhole open out.html
 ```
 
-The second command produces one self-contained HTML file (about 2.3 MB): no server, sidecar, CDN, credentials, or runtime network request. A prebuilt deterministic SKCM report is also the [Pages-ready demo](docs/index.html).
+Nothing to install? Open [the live report](https://nodaylight.github.io/keyhole-immunology/),
+which is the committed deterministic build of that same command.
+
+<table>
+<tr>
+<td width="50%"><img src="docs/media/funnel.webp" alt="38 candidate particles crossing four inspection gates with per-gate attrition counts"></td>
+<td width="50%"><img src="docs/media/evidence.webp" alt="Gate ladder for one candidate showing the exact serialized value and method label at each gate"></td>
+</tr>
+<tr>
+<td><b>Every candidate, four gates.</b> 38 particles, one per candidate. 8 stop at the proteasome, 5 at TAP, 16 at the HLA groove, 9 reach the verdict. Those counts are tallies of reason codes Python already wrote.</td>
+<td><b>Click any one to see why.</b> Each gate prints its exact value and the method that produced it. The browser never re-applies a threshold, so it can explain a rejection but cannot decide one.</td>
+</tr>
+<tr>
+<td><img src="docs/media/coverage.webp" alt="WebGL globe with cohort markers beside a bar chart of exact coverage percentages"></td>
+<td><img src="docs/media/structure.webp" alt="All 5,476 measured atoms of the 1AO7 TCR-peptide-HLA complex"></td>
+</tr>
+<tr>
+<td><b>Who else could display it.</b> Real AFR, AMR, EAS and EUR frequencies. Hatched fill means heuristic. The aggregate is never drawn as a place.</td>
+<td><b>Measured coordinates, untouched.</b> 5,476 atoms of a TCR reading a peptide-HLA complex. Nothing is moved to make the picture look better.</td>
+</tr>
+</table>
 
 ## Commands
 
 ```sh
-keyhole validate --quick              # package, schema, 26 models, populations, literature, PDBs
-keyhole validate                      # also reproduces held-out Spearman and censor-aware ROC AUC
+keyhole screen --maf tumour.maf --hla 'A*02:01,B*07:02' --report out.html --results out.json
 keyhole explain 'BRAF V600E' --hla 'A*02:01' --report braf.html
-keyhole screen --vcf tumor.vcf --hla 'A*02:01,B*07:02' --report out.html --results results.json
-keyhole open                           # opens ./out.html as a local file URI
+keyhole validate            # reproduces both published held-out metrics from packaged data
+keyhole validate --quick    # package, schema, 26 models, populations, literature, PDBs
+keyhole open out.html       # opens a local file URI
 ```
 
-`validate` reproduces pooled held-out Spearman **0.7376983698471881** and ROC AUC at 500 nM **0.9313744947688023** from 9,133 held-out rows (9,132 ROC-evaluable; one censor-bound row is indeterminate).
+`validate` must print `spearman=0.7376983698471881` and `roc_auc_500nm=0.9313744947688023`.
+Those digits are published below, so a mismatch is a real failure.
 
-### Input contract
+The frozen canonical sequence set resolves BRAF V600E, KRAS G12D, and TP53 R175H. Other rows stay
+in the audit and get no invented sequence. Run the packaged melanoma example and 87 of 100 rows
+are dropped for that reason, counted in the terminal and again in the report.
 
-MAF input requires `Hugo_Symbol`, `Chromosome`, `Start_Position`, `Reference_Allele`, `Tumor_Seq_Allele2`, `Variant_Classification`, and `HGVSp_Short`; `Tumor_Sample_Barcode` is optional. Annotated VCF requires `GENE` or `SYMBOL` plus `HGVSP`/`HGVSP_SHORT`, or a standard `ANN` field. The frozen canonical sequence set resolves BRAF V600E, KRAS G12D, and TP53 R175H. Other parsed rows remain in the audit but receive no invented sequence or verdict.
+<details>
+<summary><b>Input contract and the 26 supported alleles</b></summary>
 
-Supported models: `A*01:01`, `A*02:01`, `A*03:01`, `A*11:01`, `A*23:01`, `A*24:02`, `A*29:02`, `A*30:01`, `A*30:02`, `A*31:01`, `A*33:01`, `A*68:01`, `B*07:02`, `B*08:01`, `B*15:01`, `B*18:01`, `B*27:05`, `B*35:01`, `B*40:01`, `B*44:02`, `B*44:03`, `B*46:01`, `B*51:01`, `B*53:01`, `B*57:01`, and `B*58:01`. HLA-C*08:02 remains truthfully unsupported.
+MAF needs `Hugo_Symbol`, `Chromosome`, `Start_Position`, `Reference_Allele`,
+`Tumor_Seq_Allele2`, `Variant_Classification`, and `HGVSp_Short`. Annotated VCF needs `GENE` or
+`SYMBOL` plus `HGVSP`/`HGVSP_SHORT`, or a standard `ANN` field.
 
-## What the report means
+`A*01:01` `A*02:01` `A*03:01` `A*11:01` `A*23:01` `A*24:02` `A*29:02` `A*30:01` `A*30:02`
+`A*31:01` `A*33:01` `A*68:01` `B*07:02` `B*08:01` `B*15:01` `B*18:01` `B*27:05` `B*35:01`
+`B*40:01` `B*44:02` `B*44:03` `B*46:01` `B*51:01` `B*53:01` `B*57:01` `B*58:01`
 
-- **Binding — measured-data ML:** 26 independent deterministic PyTorch MLPs trained on 95,441 frozen quantitative IEDB HLA-A/B measurements. Patient verdicts use only supplied HLA alleles; all 26 are evaluated separately for population evidence.
-- **Processing, foreignness, agretopicity interpretation, and verdict — heuristic approximation:** transparent fixed calculations, not measured antigen processing or T-cell response.
-- **Population coverage — heuristic approximation:** seed-1729 Monte Carlo over observed AFR/AMR/EAS/EUR HLA-A/B marginals, assuming A–B linkage equilibrium and Hardy-Weinberg because phased haplotypes are unavailable. `ALL_OBSERVED` is cohort-weighted, not worldwide coverage. SAS is absent rather than fabricated.
-- **Literature panel:** 10 real published-positive IEDB T-cell records; 9 are evaluable by the A/B model panel. Composition-preserving shuffled controls are synthetic decoys, never assayed negatives. Agreement is stratified honestly into exact peptide–allele overlaps used for training, overlapping held-out validation/test assignments, and positives absent from the binder dataset; hash assignment alone is not called training exposure.
-- **Molecular scenes:** `Real crystal structure (PDB id)` means untouched experimental PDB coordinates. `Real backbone (PDB 1HHK) · mutated side chain ideal geometry — illustrative` means the candidate sequence is mapped onto the measured 1HHK chain-C Cα template; 10-mer interpolation and the mutation side-chain marker are illustrative—not measured candidate coordinates, folded predictions, or HLA docking.
+HLA-C*08:02 stays truthfully unsupported rather than being substituted.
+
+</details>
+
+## What the numbers mean
+
+| Label | What produced it |
+|---|---|
+| `measured ML` | 26 deterministic PyTorch MLPs over 95,441 frozen quantitative IEDB HLA-A/B measurements. Held-out Spearman **0.7377**, censor-aware ROC AUC at 500 nM **0.9314**, from 9,133 rows. |
+| `heuristic approximation` | Processing, foreignness, agretopicity interpretation, verdicts, and population coverage. Transparent fixed calculations, not measured biology. |
+
+Verdicts use only the alleles you supply. All 26 models run separately for population evidence and
+cannot change a verdict.
+
+**Coverage** is seed-1729 Monte Carlo over observed AFR, AMR, EAS and EUR marginals, assuming A-B
+linkage equilibrium and Hardy-Weinberg because phased haplotypes are unavailable. `ALL_OBSERVED`
+is cohort-weighted, never worldwide. SAS is absent rather than fabricated.
+
+**Literature** holds 10 real published-positive IEDB T-cell records, 9 evaluable by the A/B panel.
+Shuffled controls are synthetic decoys, never assayed negatives. Agreement is stratified by
+whether the peptide was in the training data, every denominator shown.
+
+**Structures** carry one of two labels. `Real crystal structure (PDB id)` means untouched
+coordinates. `Real backbone (PDB 1HHK) · mutated side chain ideal geometry — illustrative` means a
+measured template with an idealised side chain, drawn translucent so it cannot pass for a
+measurement.
+
+## What this does not do
+
+KEYHOLE does **not** diagnose cancer, recommend treatment, predict checkpoint response, prove
+peptide presentation or immunogenicity, replace clinical HLA typing, model HLA-C, infer missing
+protein sequences, estimate worldwide demographic coverage, dock peptides, or claim illustrative
+geometry is molecular structure. Results need experimental and clinical validation and are not
+medical advice.
 
 ## Reading the report
 
-The report is one continuous argument, numbered once in the left rail:
+Numbered once, in the left rail.
 
-| # | Section | What it answers |
-|---|---------|-----------------|
-| 00 | Overview | How many candidate cards exist, how many are predicted visible, and the exact command that produced the file |
-| 01 | Visibility funnel | Which candidates survive proteasome cleavage, TAP transport, HLA binding, and the self-scan, and exactly why each rejection happened |
-| 02 | Population coverage | How much of each observed cohort carries a modeled allele that could display the selected candidate |
-| 03 | Molecular keyhole | What the measured peptide–HLA and TCR–peptide–HLA coordinates actually look like |
-| 04 | Reality check | How KEYHOLE visibility compares with published T-cell positivity, stratified by binder-dataset exposure |
+| # | Section | Answers |
+|---|---|---|
+| 00 | Overview | How many candidates exist, how many are visible, and the command that produced the file |
+| 01 | Visibility funnel | Which candidates survive the four gates, and exactly why each rejection happened |
+| 02 | Population coverage | How much of each observed cohort could display the selected candidate |
+| 03 | Molecular keyhole | What the measured peptide-HLA and TCR-peptide-HLA coordinates look like |
+| 04 | Reality check | How KEYHOLE visibility compares with published T-cell positivity |
 | 05 | Methods and limits | Every method label, frozen source, and refusal |
 
-Every figure carries the same anatomy: a caption, a **persistent truth label** (`measured` or
-`illustrative`) that cannot scroll out of view, a viewport, a legend explaining every colour
-channel, a live status line, and a disclosure containing the exact serialized values behind
-the picture. Selecting a candidate in section 01 also drives section 02, so one choice moves
-the whole narrative.
+Every figure has the same anatomy: caption, a persistent `measured` or `illustrative` label that
+cannot scroll out of view, viewport, legend, live status, and a disclosure holding the exact
+values. Choosing a candidate in section 01 also drives section 02. Solid chart fills mean measured
+model output, hatched fills mean heuristic.
 
-Typography carries meaning: IBM Plex Serif sets prose and figure captions, the installed
-monospace face sets **every number, sequence, allele, and truth label**, and the installed UI
-sans is reserved for controls. Solid chart fills mean measured-data model output; hatched
-fills mean heuristic approximation.
+Drag to orbit any 3D scene, wheel or `±` to zoom, arrow keys to rotate, `Home` to reset.
+`prefers-reduced-motion` disables every animation and opens the static evidence. Without WebGL the
+scenes fall back to Canvas 2D and say so. Without any canvas the tables are the complete evidence.
 
-Interaction: drag or swipe to orbit any molecular scene, wheel or `±` to zoom, arrow keys to
-rotate, `Home` to reset. `prefers-reduced-motion` disables every animation and opens the
-static evidence instead. Without WebGL, the scenes fall back to the Canvas 2D coordinate
-renderer and say so; without any canvas, the exact tables remain the complete evidence.
+## Determinism
+
+All stochastic work uses seed `1729`. Set `SOURCE_DATE_EPOCH` to fix the timestamp and get
+byte-identical JSON and HTML across runs:
+
+```sh
+SOURCE_DATE_EPOCH=1787529600 .venv/bin/keyhole screen \
+  --maf data/examples/tcga_skcm.maf --hla 'A*02:01,B*07:02' --report a.html --results a.json
+shasum -a 256 a.json   # e69d251ebc4e267c281c1ca23a39c0fa152a42fe7f78dc30bc916aae114173ac
+```
+
+That hash has been stable across eight spec boundaries, including a full front-end rewrite.
+
+Data, models, browser modules, and the three PDBs are wheel-owned resources that the working
+directory cannot shadow. `KEYHOLE_DATA=/absolute/data-root` is an advanced override. Training
+requires an explicit writable output directory and never touches installed resources.
 
 ## Offline browser runtime
 
-The report inlines four byte-exact, locally packaged third-party components. There is no CDN,
-runtime import, remote texture, external font, or network request of any kind, and the
-document's `Content-Security-Policy` sets `default-src 'none'` and `connect-src 'none'`.
+Four third-party components are inlined byte-exact. No CDN, runtime import, remote texture,
+external font, or network request, and the CSP sets `default-src 'none'` with
+`connect-src 'none'`.
 
 | Component | Version | License | Role |
-|-----------|---------|---------|------|
-| [three.js](https://github.com/mrdoob/three.js) | 0.169.0 | MIT | WebGL molecular renderer: instanced ball-and-stick, backbone tubes, studio lighting |
-| [cobe](https://github.com/shuding/cobe) | 0.6.4 | MIT | WebGL coverage globe, including its embedded data-URI dot map |
-| [phenomenon](https://github.com/vaneenige/phenomenon) | 1.6.0 | MIT | cobe's WebGL instancing runtime |
-| [IBM Plex Serif](https://github.com/IBM/plex) | 2.0.0 | SIL OFL 1.1 | Weight-400 upright and italic Latin1 WOFF2 subsets, embedded as base64 |
+|---|---|---|---|
+| [three.js](https://github.com/mrdoob/three.js) | 0.169.0 | MIT | WebGL molecular renderer |
+| [cobe](https://github.com/shuding/cobe) | 0.6.4 | MIT | WebGL coverage globe |
+| [phenomenon](https://github.com/vaneenige/phenomenon) | 1.6.0 | MIT | cobe's WebGL runtime |
+| [IBM Plex Serif](https://github.com/IBM/plex) | 2.0.0 | OFL-1.1 | Embedded WOFF2 subsets |
 
-The radar and bar figures reimplement the composable structure and visual grammar of the
-[Bklit UI radar chart](https://bklit.com/docs/components/radar-chart) and the
-[EvilCharts Recharts bar chart](https://evilcharts.com/docs/recharts/bar-chart/static) as
-plain accessible SVG, because both upstreams are React component libraries that cannot run
-inside a build-free single file.
+The radar and bar figures reimplement the composable structure of the
+[Bklit radar chart](https://bklit.com/docs/components/radar-chart) and the
+[EvilCharts bar chart](https://evilcharts.com/docs/recharts/bar-chart/static) as plain SVG,
+because both upstreams are React libraries that cannot run in a build-free single file.
 
-Exact upstream URLs, npm integrity values, retained members, SHA-256 digests, license texts,
-and the reasoning behind each pin are recorded in
+Upstream URLs, npm integrity values, digests, license texts, and pin reasoning are in
 [`src/keyhole/resources/vendor/PROVENANCE.md`](src/keyhole/resources/vendor/PROVENANCE.md).
-Every digest is verified on every render, and report assembly fails loudly rather than
-silently adapting to a changed dependency.
+Every digest is verified on every render, and assembly fails loudly rather than adapting to a
+changed dependency.
 
-## What this does NOT do
+## Built with Kiro
 
-KEYHOLE does **not** diagnose cancer, recommend treatment, predict checkpoint response, prove peptide presentation or immunogenicity, replace clinical HLA typing, model HLA-C, infer missing protein sequences, estimate worldwide demographic coverage, perform peptide–HLA docking, or claim illustrative geometry is molecular structure. Results require experimental and clinical validation and are not medical advice.
+18 spec boundaries in [`.kiro/`](.kiro), each with `requirements.md`, `design.md`, and `tasks.md`,
+each closing with an append-only entry in [`DECISIONS.md`](DECISIONS.md). That log is the honest
+history, including the parts that went wrong.
 
-## Determinism and offline operation
+Four steering files in [`.kiro/steering/`](.kiro/steering) applied on every turn and did the real
+work of holding the science steady under time pressure. `invariants.md` matters most. Law 2
+requires every 3D scene to be visibly labelled real or illustrative, which is why no molecular
+figure can lose its truth label. Law 7 says that when a source is unreachable, freeze a smaller
+documented real subset and never fake records. Law 7 is why coverage spans four superpopulations
+instead of five.
 
-All stochastic work uses seed `1729`. Set `SOURCE_DATE_EPOCH` to fix report creation time and obtain byte-identical JSON/HTML across repeated runs:
+Two hooks in [`.kiro/hooks/`](.kiro/hooks) enforced the gates unprompted: Ruff plus fail-fast
+pytest after any edit under `src/` or `tests/`, and the full suite plus an end-to-end report build
+when an agent execution stops. Several regressions died in a hook instead of a commit.
 
-```sh
-SOURCE_DATE_EPOCH=1787529600 keyhole screen --maf data/examples/tcga_skcm.maf --hla 'A*02:01,B*07:02' --report out.html --results results.json
-```
-
-Scientific data, 26 safe-array NPZ models, browser modules, the stylesheet, the vendored browser runtime, validation fixture, and three PDBs are wheel-owned resources. The current directory cannot shadow them. `KEYHOLE_DATA=/absolute/complete/data-root` is an explicit advanced override; it must contain the documented `SOURCES.md` and full runtime layout. Browser assets are never overridden. Training requires an explicit writable `output_dir` and never writes into installed resources.
-
-## Sources, terms, and citations
-
-Complete frozen URLs, transformations, counts, hashes, license/terms notes, and citations are in [`src/keyhole/resources/data/SOURCES.md`](src/keyhole/resources/data/SOURCES.md). Core references include:
-
-- Kim et al., BMC Bioinformatics 2014, [DOI 10.1186/1471-2105-15-241](https://doi.org/10.1186/1471-2105-15-241); Vita et al., NAR 2019, [DOI 10.1093/nar/gky1006](https://doi.org/10.1093/nar/gky1006) — IEDB binding/assay data (CC BY 4.0 terms noted in provenance).
-- UniProt Consortium, NAR 2025, [DOI 10.1093/nar/gkae1010](https://doi.org/10.1093/nar/gkae1010) — human proteins/self peptides (CC BY 4.0).
-- Gourraud et al., PLOS ONE 2014, [DOI 10.1371/journal.pone.0097282](https://doi.org/10.1371/journal.pone.0097282); Brandt et al., G3 2015, [DOI 10.1534/g3.115.016949](https://doi.org/10.1534/g3.115.016949) — HLA observations. The authors’ data repository declares no separate license; KEYHOLE records attribution and does not assert broader rights.
-- Berman et al., NAR 2000, [DOI 10.1093/nar/28.1.235](https://doi.org/10.1093/nar/28.1.235) — PDB/wwPDB structures (CC0).
-- Henikoff & Henikoff, PNAS 1992, [DOI 10.1073/pnas.89.22.10915](https://doi.org/10.1073/pnas.89.22.10915) — BLOSUM62.
-
-TCGA/cBioPortal examples retain original study and GDC data-use terms. Review the provenance file before redistribution. This repository does not invent a blanket license for third-party assets.
-
-## How this was built with Kiro
-
-KEYHOLE was written in Kiro across 18 spec boundaries, kept in [`.kiro/`](.kiro). Every
-boundary has `requirements.md`, `design.md`, and `tasks.md`, and closes with an append-only
-entry in [`DECISIONS.md`](DECISIONS.md) recording what changed, what was measured, and what was
-refused. Reading `DECISIONS.md` top to bottom is the honest history of the project, including
-the parts that went wrong.
-
-Four steering files in [`.kiro/steering/`](.kiro/steering) applied on every turn and did the
-real work of keeping the science honest under time pressure. `invariants.md` is the important
-one. Its second law says every 3D scene must be visibly labelled either
-`Real crystal structure (PDB <id>)` or as illustrative, which is why no molecular figure in the
-report can lose its truth label. Its seventh law says that when an upstream source is
-unreachable, freeze a smaller documented real subset and never fake records. That law is why
-population coverage covers four superpopulations instead of five: the frozen 1000 Genomes HLA
-panel has no South Asian observations, so the report says SAS is absent rather than reporting
-zero.
-
-Two agent hooks in [`.kiro/hooks/`](.kiro/hooks) enforced the gates without being asked.
-`check-python-source.json` runs Ruff and a fail-fast pytest after any Kiro edit that touches
-`src/` or `tests/`. `full-suite-report-smoke.json` runs the full suite, quick validation, and an
-end-to-end offline report build when an agent execution stops. Several regressions died in the
-hook rather than in a commit.
-
-Some specific places where the spec-first loop changed the code rather than just documenting it:
+Three places the loop changed the code rather than describing it:
 
 - **S1 froze a smaller real dataset instead of a bigger fake one.** The documented IEDB archive
-  URL returned HTTP 404. The failure, the substitute official host, and the upstream hash are
-  all recorded in provenance rather than papered over.
-- **S6 rejected a dependency, R8 accepted one on conditions.** The first 3D renderer was a local
-  Canvas 2D projection engine, chosen to avoid a CDN and a Node toolchain. R8 replaced it with
-  real WebGL only after proving that an exact-pinned three.js build could be inlined byte-exact
-  with no network request, and the old engine stayed as the truthful fallback.
-- **R8 caught two of its own mistakes.** A structure tab labelled PDB 3PWN as a TCR complex,
-  which contradicts the S6 decision entry stating that 3PWN contains no TCR chains. A new source
-  comment promising never to call `Math.random` tripped the test that forbids `Math.random`. The
-  test was right, so the comment changed.
+  URL returned 404. The failure, the substitute host, and the upstream hash are all in provenance.
+- **S6 refused a dependency; R8 accepted one on conditions.** The first 3D renderer was a local
+  Canvas 2D engine, to avoid a CDN and a Node toolchain. R8 switched to real WebGL only after
+  proving a pinned three.js build inlines with zero network requests, and kept the old engine as
+  the fallback.
+- **R8 caught two of its own mistakes.** A tab called PDB 3PWN a TCR complex, contradicting the S6
+  entry stating it has no TCR chains. A comment promising never to call `Math.random` tripped the
+  test forbidding `Math.random`. The test was right, so the comment changed.
 
-## Development and release gates
+## Development
 
 ```sh
-.venv/bin/pytest -q
+.venv/bin/pytest -q            # 92 tests
 .venv/bin/ruff check src tests
 .venv/bin/keyhole validate
 ```
 
-The S8 release gate additionally builds and inspects the wheel, installs it into a clean Python 3.11 environment, changes to an unrelated directory with `KEYHOLE_DATA` unset, runs full validation and the SKCM screen, verifies deterministic bytes and network-free HTML, and opens the report as a local file URI. See [`docs/VIDEO.md`](docs/VIDEO.md) for the demo storyboard and [`DECISIONS.md`](DECISIONS.md) for append-only scientific/engineering decisions.
+The release gate also builds the wheel, installs it into a clean Python 3.11 environment outside
+the repository with `KEYHOLE_DATA` unset, and checks the output bytes are unchanged. Front-end
+behaviour is verified in a scripted browser at 1512 px and 390 px, with and without reduced
+motion, and with WebGL disabled. Demo storyboard: [`docs/VIDEO.md`](docs/VIDEO.md).
+
+## Sources and terms
+
+Frozen URLs, transformations, counts, hashes, and license notes are in
+[`SOURCES.md`](src/keyhole/resources/data/SOURCES.md). TCGA and cBioPortal examples keep their
+original study and GDC terms.
+
+**This repository deliberately has no blanket LICENSE file.** It bundles assets under different
+terms, and inventing one licence over them would be wrong. Review the provenance file before
+redistributing.
+
+<details>
+<summary><b>Core citations</b></summary>
+
+- Kim et al., BMC Bioinformatics 2014, [10.1186/1471-2105-15-241](https://doi.org/10.1186/1471-2105-15-241); Vita et al., NAR 2019, [10.1093/nar/gky1006](https://doi.org/10.1093/nar/gky1006). IEDB binding and assay data, CC BY 4.0.
+- UniProt Consortium, NAR 2025, [10.1093/nar/gkae1010](https://doi.org/10.1093/nar/gkae1010). Human proteins and self peptides, CC BY 4.0.
+- Gourraud et al., PLOS ONE 2014, [10.1371/journal.pone.0097282](https://doi.org/10.1371/journal.pone.0097282); Brandt et al., G3 2015, [10.1534/g3.115.016949](https://doi.org/10.1534/g3.115.016949). HLA observations. The authors' repository declares no separate license; KEYHOLE records attribution and asserts no broader rights.
+- Berman et al., NAR 2000, [10.1093/nar/28.1.235](https://doi.org/10.1093/nar/28.1.235). PDB structures, CC0.
+- Henikoff & Henikoff, PNAS 1992, [10.1073/pnas.89.22.10915](https://doi.org/10.1073/pnas.89.22.10915). BLOSUM62.
+
+</details>
