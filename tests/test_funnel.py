@@ -11,6 +11,7 @@ from keyhole.funnel import (
     METHOD_LABELS,
     cleavage_score,
     foreignness_score,
+    foreignness_scores,
     tap_score,
     verdict_engine,
 )
@@ -39,6 +40,17 @@ def test_nearest_self_blosum_distance_is_zero_for_exact_sampled_self() -> None:
     assert foreignness_score(self_peptide, self_index=row) == 0.0
     changed = "W" + self_peptide[1:]
     assert 0 <= foreignness_score(changed, self_index=row) <= 1
+
+
+def test_batched_foreignness_is_exactly_scalar_equivalent() -> None:
+    peptides = ("GILGFVFTL", "WILGFVFTL", "ARNDCQEGH", "ARNDCQEGHI")
+    self_rows = np.asarray(
+        [[AA_ORDER.index(residue) for residue in peptide] for peptide in peptides[:3]],
+        dtype=np.uint8,
+    )
+    expected = tuple(foreignness_score(peptide, self_index=self_rows) for peptide in peptides)
+    assert foreignness_scores(peptides, self_index=self_rows) == expected
+    assert foreignness_scores((), self_index=self_rows) == ()
 
 
 def test_verdict_engine_covers_all_verdicts_and_required_language() -> None:

@@ -54,10 +54,12 @@ def _json_text(value: object) -> str:
     )
 
 
-def _report_contract(document: Mapping[str, object]) -> dict[str, object]:
+def _report_contract(
+    document: Mapping[str, object], *, schema_validated: bool = False
+) -> dict[str, object]:
     """Validate additive fields and cross-branch invariants consumed by browser modules."""
 
-    results = validate_results(dict(document))
+    results = dict(document) if schema_validated else validate_results(dict(document))
 
     def mapping(value: object, path: str) -> dict[str, object]:
         if not isinstance(value, dict):
@@ -308,10 +310,12 @@ _STYLE = r"""
 """
 
 
-def render_report(document: Mapping[str, object]) -> str:
-    """Render a validated result into one network-free, sidecar-free HTML string."""
+def _render_report(
+    document: Mapping[str, object], *, schema_validated: bool = False
+) -> str:
+    """Render a result into one network-free, sidecar-free HTML string."""
 
-    results = _report_contract(document)
+    results = _report_contract(document, schema_validated=schema_validated)
     scenes = _scene_envelope(results)
     root = web_root()
     scripts = "\n".join(
@@ -354,8 +358,25 @@ def render_report(document: Mapping[str, object]) -> str:
 <script>{scripts}</script></body></html>"""
 
 
+def render_report(document: Mapping[str, object]) -> str:
+    """Validate and render one network-free, sidecar-free HTML string."""
+
+    return _render_report(document)
+
+
+def _write_validated_report(document: Mapping[str, object], path: str | Path) -> Path:
+    """Write a pipeline-validated report while retaining additive contract checks."""
+
+    destination = Path(path)
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    destination.write_text(
+        _render_report(document, schema_validated=True), encoding="utf-8"
+    )
+    return destination.resolve()
+
+
 def write_report(document: Mapping[str, object], path: str | Path) -> Path:
-    """Write one standalone UTF-8 HTML report and return its resolved path."""
+    """Validate and write one standalone UTF-8 HTML report."""
 
     destination = Path(path)
     destination.parent.mkdir(parents=True, exist_ok=True)

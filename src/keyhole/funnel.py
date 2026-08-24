@@ -156,6 +156,26 @@ def _self_index() -> np.ndarray:
     return index
 
 
+_FOREIGNNESS_BATCH_SIZE = 64
+_FOREIGNNESS_SELF_BLOCK_SIZE = 250_000
+_AA_ONE_HOT = np.eye(len(AA_ORDER), dtype=np.float32)
+
+
+def _validate_self_index(self_index: np.ndarray | None) -> np.ndarray:
+    index = _self_index() if self_index is None else np.asarray(self_index)
+    if index.ndim != 2 or index.shape[1] != 9 or np.any(index >= 20):
+        raise ValueError("self index must have shape (n, 9) with amino-acid indices 0..19")
+    return index
+
+
+def _normalize_foreignness(query: np.ndarray, nearest: float) -> float:
+    maximum = float(query.max(axis=1).sum())
+    minimum = float(query.min(axis=1).sum())
+    if maximum == minimum:
+        return 0.0
+    return min(1.0, max(0.0, (maximum - nearest) / (maximum - minimum)))
+
+
 def foreignness_score(peptide: str, *, self_index: np.ndarray | None = None) -> float:
     """Return normalized BLOSUM62 distance from the nearest sampled self 9-mer.
 
@@ -165,19 +185,45 @@ def foreignness_score(peptide: str, *, self_index: np.ndarray | None = None) -> 
 
     if len(peptide) not in {9, 10} or set(peptide) - set(AA_ORDER):
         raise ValueError("foreignness scoring requires a canonical 9-mer or 10-mer")
-    index = _self_index() if self_index is None else np.asarray(self_index)
-    if index.ndim != 2 or index.shape[1] != 9 or np.any(index >= 20):
-        raise ValueError("self index must have shape (n, 9) with amino-acid indices 0..19")
+    index = _validate_self_index(self_index)
     query = _query_rows(peptide)
     similarities = np.zeros(len(index), dtype=np.float32)
     for position in range(9):
         similarities += query[position, index[:, position]]
-    nearest = float(similarities.max())
-    maximum = float(query.max(axis=1).sum())
-    minimum = float(query.min(axis=1).sum())
-    if maximum == minimum:
-        return 0.0
-    return min(1.0, max(0.0, (maximum - nearest) / (maximum - minimum)))
+    return _normalize_foreignness(query, float(similarities.max()))
+
+
+def foreignness_scores(
+    peptides: Sequence[str], *, self_index: np.ndarray | None = None
+) -> tuple[float, ...]:
+    """Score peptide queries together with exact scalar-equivalent accumulation."""
+
+    normalized = tuple(peptides)
+    for peptide in normalized:
+        if len(peptide) not in {9, 10} or set(peptide) - set(AA_ORDER):
+            raise ValueError("foreignness scoring requires a canonical 9-mer or 10-mer")
+    if not normalized:
+        return ()
+    index = _validate_self_index(self_index)
+    output: list[float] = []
+    for start in range(0, len(normalized), _FOREIGNNESS_BATCH_SIZE):
+        batch = normalized[start : start + _FOREIGNNESS_BATCH_SIZE]
+        queries = np.stack([_query_rows(peptide) for peptide in batch])
+        nearest = np.full(len(queries), -np.inf, dtype=np.float32)
+        for self_start in range(0, len(index), _FOREIGNNESS_SELF_BLOCK_SIZE):
+            self_block = index[
+                self_start : self_start + _FOREIGNNESS_SELF_BLOCK_SIZE
+            ]
+            similarities = np.zeros((len(self_block), len(queries)), dtype=np.float32)
+            for position in range(9):
+                self_one_hot = _AA_ONE_HOT[self_block[:, position]]
+                similarities += self_one_hot @ queries[:, position, :].T
+            nearest = np.maximum(nearest, similarities.max(axis=0))
+        output.extend(
+            _normalize_foreignness(query, float(score))
+            for query, score in zip(queries, nearest, strict=True)
+        )
+    return tuple(output)
 
 
 def differential_agretopicity(

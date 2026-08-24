@@ -9,6 +9,7 @@ from keyhole.peptides import PeptidePair
 from keyhole.population import (
     ASSUMPTION,
     coverage_from_matrix,
+    hla_allele_codes,
     peptide_allele_matrix,
     simulate_haplotypes,
 )
@@ -21,6 +22,10 @@ def test_seeded_haplotype_draws_are_value_deterministic() -> None:
     assert set(first) == {"AFR", "AMR", "EAS", "EUR"}
     assert all((first[pop] == second[pop]).all() for pop in first)
     assert all(values.shape == (250, 4) for values in first.values())
+    assert all(values.dtype.kind == "u" and not values.flags.writeable for values in first.values())
+    codes = hla_allele_codes()
+    assert len(codes) == len(set(codes.values())) == 145
+    assert codes["A*01:01"] == 0
     assert "linkage equilibrium" in ASSUMPTION
 
 

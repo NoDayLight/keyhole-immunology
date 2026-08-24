@@ -8,6 +8,7 @@ import json
 import os
 from collections.abc import Iterator
 from dataclasses import dataclass
+from functools import cache
 from pathlib import Path
 from typing import TextIO
 
@@ -169,11 +170,18 @@ def load_literature_records() -> tuple[LiteratureRecord, ...]:
     return tuple(records)
 
 
-def load_famous_proteins() -> dict[str, dict[str, str]]:
-    """Load verified canonical sequences keyed by gene symbol."""
+@cache
+def _famous_protein_records(path: Path) -> tuple[tuple[tuple[str, str], ...], ...]:
+    raw = json.loads(path.read_text(encoding="utf-8"))
+    return tuple(tuple(record.items()) for record in raw)
 
-    raw = json.loads(asset_path("residues/famous_proteins.json").read_text(encoding="utf-8"))
-    return {record["gene"]: record for record in raw}
+
+def load_famous_proteins() -> dict[str, dict[str, str]]:
+    """Load verified canonical sequences as independent mutable record copies."""
+
+    records = _famous_protein_records(asset_path("residues/famous_proteins.json"))
+    copied = [dict(fields) for fields in records]
+    return {record["gene"]: record for record in copied}
 
 
 def pdb_path(pdb_id: str) -> Path:

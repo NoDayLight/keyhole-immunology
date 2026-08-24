@@ -20,6 +20,7 @@ from keyhole.funnel import (
     cleavage_score,
     differential_agretopicity,
     foreignness_score,
+    foreignness_scores,
     tap_score,
     verdict_engine,
 )
@@ -269,8 +270,16 @@ def screen_variants(
         for prediction in model.predict_many(wild_sequences, allele):
             predictions[(prediction.peptide, prediction.allele)] = prediction
 
+    if foreignness_fn is foreignness_score:
+        foreignness_values = dict(
+            zip(mutant_sequences, foreignness_scores(mutant_sequences), strict=True)
+        )
+    else:
+        foreignness_values = {
+            peptide: foreignness_fn(peptide) for peptide in mutant_sequences
+        }
     evidence = {
-        peptide: (cleavage_score(peptide), tap_score(peptide), foreignness_fn(peptide))
+        peptide: (cleavage_score(peptide), tap_score(peptide), foreignness_values[peptide])
         for peptide in mutant_sequences
     }
     user_results = tuple(

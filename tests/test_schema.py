@@ -52,6 +52,15 @@ def test_dump_is_canonical_and_byte_deterministic(tmp_path: Path) -> None:
     assert json.loads(first.read_text(encoding="utf-8")) == document
 
 
+def test_public_dump_still_rejects_invalid_documents(tmp_path: Path) -> None:
+    document = copy.deepcopy(load_fixture())
+    document["meta"]["schema_version"] = 2
+    destination = tmp_path / "invalid.json"
+    with pytest.raises(SchemaError, match="schema_version"):
+        dump_results(document, destination)
+    assert not destination.exists()
+
+
 def test_schema_rejects_invalid_peptide_position() -> None:
     document = copy.deepcopy(load_fixture())
     document["mutations"][0]["peptides"][0]["position"] = 99

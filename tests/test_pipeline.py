@@ -28,6 +28,11 @@ class RecordingBinder:
     def __init__(self) -> None:
         self.calls: list[tuple[str, tuple[str, ...]]] = []
 
+    def predict(self, peptide: str, allele: str) -> BindingPrediction:
+        """Return one stable prediction for literature-panel tests."""
+
+        return self.predict_many((peptide,), allele)[0]
+
     def predict_many(
         self, peptides: list[str] | tuple[str, ...], allele: str
     ) -> tuple[BindingPrediction, ...]:
@@ -83,13 +88,19 @@ def test_real_paad_audit_counts_unresolved_frameshifts_independently() -> None:
 
 def test_pipeline_batches_all_models_but_patient_evidence_uses_only_user_hla() -> None:
     binder = RecordingBinder()
+    foreignness_calls: list[str] = []
+
+    def scalar_foreignness(peptide: str) -> float:
+        foreignness_calls.append(peptide)
+        return 0.75
+
     run = screen_variants(
         [parse_famous("BRAF V600E")],
         "A*02:01,B*07:02",
         input_name="fixed",
         input_path="famous:BRAF V600E",
         binder=binder,
-        foreignness_fn=lambda _peptide: 0.75,
+        foreignness_fn=scalar_foreignness,
         literature_branch=LITERATURE_STUB,
         population_draws=64,
         created_utc="2026-08-24T00:00:00Z",
@@ -100,6 +111,7 @@ def test_pipeline_batches_all_models_but_patient_evidence_uses_only_user_hla() -
     calls_per_allele = Counter(allele for allele, _peptides in binder.calls)
     assert calls_per_allele == Counter({allele: 2 for allele in ALLELES})
     assert all(peptides for _allele, peptides in binder.calls)
+    assert foreignness_calls == list(binder.calls[0][1])
 
     mutations = run.results["mutations"]
     assert isinstance(mutations, list)
@@ -124,6 +136,62 @@ def test_pipeline_batches_all_models_but_patient_evidence_uses_only_user_hla() -
         created_utc="2026-08-24T00:00:00Z",
     )
     assert repeated.results == run.results
+
+
+def test_pipeline_batches_default_foreignness_once(monkeypatch) -> None:  # type: ignore[no-untyped-def]
+    import keyhole.pipeline as pipeline_module
+
+    calls: list[tuple[str, ...]] = []
+
+    def batched(peptides: tuple[str, ...]) -> tuple[float, ...]:
+        calls.append(tuple(peptides))
+        return (0.75,) * len(peptides)
+
+    monkeypatch.setattr(pipeline_module, "foreignness_scores", batched)
+    binder = RecordingBinder()
+    screen_variants(
+        [parse_famous("BRAF V600E")],
+        "A*02:01",
+        input_name="fixed",
+        input_path="famous:BRAF V600E",
+        binder=binder,
+        literature_branch=LITERATURE_STUB,
+        population_draws=8,
+        created_utc="2026-08-24T00:00:00Z",
+    )
+    assert calls == [binder.calls[0][1]]
+
+
+def test_cli_reuses_pipeline_validation_for_both_outputs(
+    monkeypatch, tmp_path: Path
+) -> None:  # type: ignore[no-untyped-def]
+    import keyhole.pipeline as pipeline_module
+    import keyhole.report as report_module
+    from keyhole.cli import _write_outputs
+
+    validations: list[object] = []
+    original = pipeline_module.validate_results
+
+    def counted(document):  # type: ignore[no-untyped-def]
+        validations.append(document)
+        return original(document)
+
+    monkeypatch.setattr(pipeline_module, "validate_results", counted)
+    monkeypatch.setattr(report_module, "validate_results", counted)
+    run = screen_variants(
+        [parse_famous("BRAF V600E")],
+        "A*02:01",
+        input_name="fixed",
+        input_path="famous:BRAF V600E",
+        binder=RecordingBinder(),
+        population_draws=8,
+        created_utc="2026-08-24T00:00:00Z",
+    )
+    report = tmp_path / "report.html"
+    results = tmp_path / "results.json"
+    assert _write_outputs(run, report, results) == report.resolve()
+    assert report.is_file() and results.is_file()
+    assert validations == [run.results]
 
 
 def test_pipeline_refuses_to_invent_missing_canonical_context() -> None:

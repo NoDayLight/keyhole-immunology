@@ -186,11 +186,16 @@ def load_results(path: str | Path) -> dict[str, Any]:
         return validate_results(json.load(handle))
 
 
+def _dump_validated_results(document: dict[str, Any], path: str | Path) -> None:
+    """Write a pipeline-validated document without repeating schema traversal."""
+
+    Path(path).write_text(
+        json.dumps(document, indent=2, sort_keys=True, ensure_ascii=False) + "\n",
+        encoding="utf-8",
+    )
+
+
 def dump_results(document: Any, path: str | Path) -> None:
     """Validate and write canonical deterministic schema-v1 JSON."""
 
-    validated = validate_results(document)
-    Path(path).write_text(
-        json.dumps(validated, indent=2, sort_keys=True, ensure_ascii=False) + "\n",
-        encoding="utf-8",
-    )
+    _dump_validated_results(validate_results(document), path)

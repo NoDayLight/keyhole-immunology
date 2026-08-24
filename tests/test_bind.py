@@ -107,6 +107,26 @@ def test_inference_is_byte_and_value_deterministic() -> None:
     assert math.isfinite(first.percentile_rank) and 0 <= first.percentile_rank <= 100
 
 
+def test_runtime_encoding_cache_is_reused_across_alleles(monkeypatch) -> None:  # type: ignore[no-untyped-def]
+    import keyhole.bind as bind_module
+
+    binder = load_binder()
+    original = bind_module.encode_peptide
+    encoded: list[str] = []
+
+    def counted(peptide: str) -> np.ndarray:
+        encoded.append(peptide)
+        return original(peptide)
+
+    monkeypatch.setattr(bind_module, "encode_peptide", counted)
+    peptides = ("GILGFVFTL", "ARNDCQEGHI")
+    binder.predict_many(peptides, "A*02:01")
+    binder.predict_many(peptides, "B*07:02")
+    assert encoded == list(peptides)
+    assert set(binder._encoding_cache) == set(peptides)
+    assert all(not value.flags.writeable for value in binder._encoding_cache.values())
+
+
 def test_heldout_metrics_are_finite_and_reproduce_stored_values() -> None:
     artifact_dir = data_root() / ARTIFACT_DIRECTORY
     stored = json.loads((artifact_dir / "metrics.json").read_text(encoding="utf-8"))

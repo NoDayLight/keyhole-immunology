@@ -50,6 +50,15 @@ def test_population_and_literature_snapshots_are_real_and_explicitly_narrowed() 
     assert any(item.peptide == "GADGVGKSAL" and item.allele == "C*08:02" for item in literature)
 
 
+def test_famous_protein_cache_does_not_expose_mutable_state() -> None:
+    first = load_famous_proteins()
+    first["BRAF"]["sequence"] = "corrupted"
+    first.pop("KRAS")
+    second = load_famous_proteins()
+    assert second["BRAF"]["sequence"][599] == "V"
+    assert second["KRAS"]["sequence"][11] == "G"
+
+
 def test_frozen_structural_assets_are_verified_not_generated() -> None:
     proteins = load_famous_proteins()
     assert proteins["BRAF"]["sequence"][599] == "V"

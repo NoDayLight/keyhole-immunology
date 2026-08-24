@@ -16,8 +16,8 @@ from keyhole.data import load_literature_records, pdb_path
 from keyhole.parse import parse_famous
 from keyhole.pipeline import InputAudit, normalize_hla_list, screen_path, screen_variants
 from keyhole.population import frequency_panels
-from keyhole.report import write_report
-from keyhole.schema import dump_results, validate_results
+from keyhole.report import _write_validated_report
+from keyhole.schema import _dump_validated_results, validate_results
 from keyhole.structure import summarize_pdb
 
 
@@ -104,8 +104,12 @@ def _run_validate(args: argparse.Namespace) -> int:
 def _write_outputs(run, report_path: Path | None, results_path: Path | None) -> Path | None:  # type: ignore[no-untyped-def]
     if results_path is not None:
         results_path.parent.mkdir(parents=True, exist_ok=True)
-        dump_results(run.results, results_path)
-    return write_report(run.results, report_path) if report_path is not None else None
+        _dump_validated_results(run.results, results_path)
+    return (
+        _write_validated_report(run.results, report_path)
+        if report_path is not None
+        else None
+    )
 
 
 def _run_screen(args: argparse.Namespace) -> int:

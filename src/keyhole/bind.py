@@ -685,13 +685,22 @@ class FrozenBinder:
         for values in self.calibrations.values():
             values.setflags(write=False)
         self.model_card = dict(model_card)
+        self._encoding_cache: dict[str, np.ndarray] = {}
+
+    def _encoded_peptide(self, peptide: str) -> np.ndarray:
+        encoded = self._encoding_cache.get(peptide)
+        if encoded is None:
+            encoded = encode_peptide(peptide).reshape(189)
+            encoded.setflags(write=False)
+            self._encoding_cache[peptide] = encoded
+        return encoded
 
     def predict(self, peptide: str, allele: str) -> BindingPrediction:
         """Predict positive IC50 nM and a lower-is-better self percentile."""
 
         peptide = _validate_peptide(peptide)
         allele = _normalize_supported_allele(allele)
-        features = encode_peptide(peptide).reshape(1, 189)
+        features = np.stack((self._encoded_peptide(peptide),))
         predicted = float(_physical_ic50(_predict_log10(self.models[allele], features))[0])
         calibration = self.calibrations[allele]
         percentile = float(
@@ -708,7 +717,7 @@ class FrozenBinder:
         normalized = [_validate_peptide(peptide) for peptide in peptides]
         if not normalized:
             return ()
-        features = np.stack([encode_peptide(peptide).reshape(189) for peptide in normalized])
+        features = np.stack([self._encoded_peptide(peptide) for peptide in normalized])
         physical = _physical_ic50(_predict_log10(self.models[allele], features))
         calibration = self.calibrations[allele]
         ranks = np.searchsorted(calibration, physical, side="right") * 100.0 / len(calibration)

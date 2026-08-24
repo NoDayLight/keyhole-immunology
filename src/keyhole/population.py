@@ -70,34 +70,65 @@ def frequency_panels(
     return tuple(panels)
 
 
-def simulate_haplotypes(
-    *, draws: int = DEFAULT_DRAWS, seed: int = PROJECT_SEED
-) -> dict[str, np.ndarray]:
-    """Draw two independent A-B haplotypes per person from real marginals.
+def hla_allele_codes(
+    panels: Sequence[FrequencyPanel] | None = None,
+) -> dict[str, int]:
+    """Return the stable sorted observed-allele codebook used by simulations."""
 
-    Columns are A1, B1, A2, B2. Independence is a labeled heuristic because
-    the frozen published source does not provide phased A-B haplotypes.
-    """
+    source = frequency_panels() if panels is None else panels
+    return {
+        allele: code
+        for code, allele in enumerate(
+            sorted({allele for panel in source for allele in panel.alleles})
+        )
+    }
 
+
+def _simulate_haplotype_codes(
+    *,
+    draws: int,
+    seed: int,
+    panels: Sequence[FrequencyPanel],
+) -> tuple[dict[str, np.ndarray], dict[str, int]]:
     if draws <= 0:
         raise ValueError("Monte Carlo draws must be positive")
+    allele_codes = hla_allele_codes(panels)
     rng = np.random.default_rng(seed)
     by_population: dict[str, dict[str, FrequencyPanel]] = defaultdict(dict)
-    for panel in frequency_panels():
+    for panel in panels:
         by_population[panel.superpopulation][panel.locus] = panel
     simulations: dict[str, np.ndarray] = {}
     for population in sorted(by_population):
         a_panel = by_population[population]["HLA-A"]
         b_panel = by_population[population]["HLA-B"]
-        a = rng.choice(a_panel.alleles, size=(draws, 2), p=a_panel.probabilities)
-        b = rng.choice(b_panel.alleles, size=(draws, 2), p=b_panel.probabilities)
-        genotypes = np.empty((draws, 4), dtype="<U12")
+        a_values = np.asarray([allele_codes[value] for value in a_panel.alleles], dtype=np.uint16)
+        b_values = np.asarray([allele_codes[value] for value in b_panel.alleles], dtype=np.uint16)
+        a = rng.choice(a_values, size=(draws, 2), p=a_panel.probabilities)
+        b = rng.choice(b_values, size=(draws, 2), p=b_panel.probabilities)
+        genotypes = np.empty((draws, 4), dtype=np.uint16)
         genotypes[:, 0] = a[:, 0]
         genotypes[:, 1] = b[:, 0]
         genotypes[:, 2] = a[:, 1]
         genotypes[:, 3] = b[:, 1]
         genotypes.setflags(write=False)
         simulations[population] = genotypes
+    return simulations, allele_codes
+
+
+def simulate_haplotypes(
+    *, draws: int = DEFAULT_DRAWS, seed: int = PROJECT_SEED
+) -> dict[str, np.ndarray]:
+    """Draw integer-coded A1/B1/A2/B2 genotypes from real marginals.
+
+    Independence is a labeled heuristic because the frozen published source
+    does not provide phased A-B haplotypes. Codes follow sorted observed allele
+    names and are available from :func:`hla_allele_codes`; they exist only to
+    make repeated carrier tests compact.
+    """
+
+    simulations, _allele_codes = _simulate_haplotype_codes(
+        draws=draws, seed=seed, panels=frequency_panels()
+    )
     return simulations
 
 
@@ -115,25 +146,42 @@ def coverage_from_matrix(
     draws: int = DEFAULT_DRAWS,
     seed: int = PROJECT_SEED,
 ) -> dict[str, dict[str, float]]:
-    """Estimate per-candidate population coverage from a peptide×allele matrix."""
+    """Estimate coverage from integer genotypes and cached allele carrier masks."""
 
-    genotypes = simulate_haplotypes(draws=draws, seed=seed)
+    panels = frequency_panels()
+    genotypes, allele_codes = _simulate_haplotype_codes(
+        draws=draws, seed=seed, panels=panels
+    )
     sample_sizes = {
         panel.superpopulation: panel.individuals
-        for panel in frequency_panels()
+        for panel in panels
         if panel.locus == "HLA-A"
     }
+    carrier_masks: dict[str, tuple[np.ndarray, ...]] = {}
+    for population, simulated in genotypes.items():
+        masks = tuple(
+            np.any(simulated == code, axis=1) for code in range(len(allele_codes))
+        )
+        for mask in masks:
+            mask.setflags(write=False)
+        carrier_masks[population] = masks
+
     output: dict[str, dict[str, float]] = {}
     for candidate, allele_values in matrix.items():
-        visible = {
-            normalize_allele(allele)
-            for allele, value in allele_values.items()
-            if _is_visible(value)
-        }
+        visible_codes = sorted(
+            {
+                allele_codes[normalized]
+                for allele, value in allele_values.items()
+                if _is_visible(value)
+                and (normalized := normalize_allele(allele)) in allele_codes
+            }
+        )
         coverage: dict[str, float] = {}
-        for population, simulated in genotypes.items():
-            fraction = float(np.isin(simulated, tuple(sorted(visible))).any(axis=1).mean())
-            coverage[population] = round(100.0 * fraction, 4)
+        for population, masks in carrier_masks.items():
+            carriers = np.zeros(draws, dtype=np.bool_)
+            for code in visible_codes:
+                carriers |= masks[code]
+            coverage[population] = round(100.0 * float(carriers.mean()), 4)
         total_people = sum(sample_sizes.values())
         overall = sum(coverage[pop] * sample_sizes[pop] for pop in coverage) / total_people
         coverage["ALL_OBSERVED"] = round(overall, 4)
