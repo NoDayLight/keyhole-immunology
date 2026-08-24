@@ -7,7 +7,7 @@ from collections import Counter, defaultdict
 from dataclasses import dataclass
 from pathlib import Path
 
-from keyhole.bind import AA_ORDER
+from keyhole.contracts import canonical_peptide
 from keyhole.data import pdb_path
 
 REAL_TRUTH_PREFIX = "Real crystal structure (PDB "
@@ -327,9 +327,7 @@ def _side_chain_element(residue: str) -> str:
 def schematic_peptide_scene(sequence: str, mutation_position: int) -> dict[str, object]:
     """Graft a candidate onto the real 1HHK peptide backbone with explicit caveats."""
 
-    peptide = sequence.strip().upper()
-    if len(peptide) not in {9, 10} or set(peptide) - set(AA_ORDER):
-        raise ValueError("candidate schematic requires a canonical 9-mer or 10-mer")
+    peptide = canonical_peptide(sequence, label="candidate schematic")
     if mutation_position < 0 or mutation_position >= len(peptide):
         raise ValueError("mutation position must index the candidate peptide")
 

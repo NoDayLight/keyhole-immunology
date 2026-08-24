@@ -2,14 +2,17 @@
 
 from __future__ import annotations
 
+import json
 from collections import Counter
 from dataclasses import replace
 from pathlib import Path
 
 import pytest
 
+from keyhole.assets import packaged_file
 from keyhole.bind import ALLELES, BindingPrediction
 from keyhole.parse import parse_famous
+from keyhole.peptides import PeptidePair
 from keyhole.pipeline import (
     PipelineError,
     load_screen_input,
@@ -19,7 +22,9 @@ from keyhole.pipeline import (
 from keyhole.schema import validate_results
 
 DATA = Path(__file__).parents[1] / "data"
-LITERATURE_STUB = {"entries": [], "agreement_stats": {}}
+LITERATURE_STUB = json.loads(
+    packaged_file("validation/results.sample.json").read_text(encoding="utf-8")
+)["literature"]
 
 
 class RecordingBinder:
@@ -138,6 +143,73 @@ def test_pipeline_batches_all_models_but_patient_evidence_uses_only_user_hla() -
     assert repeated.results == run.results
 
 
+def test_pipeline_reuses_prediction_shared_by_mutant_and_wild_batches(
+    monkeypatch,
+) -> None:  # type: ignore[no-untyped-def]
+    import keyhole.pipeline as pipeline_module
+
+    shared = "CCCCCCCCC"
+    pairs = (
+        PeptidePair("AAAAAAAAA", shared, 0, 0, "missense"),
+        PeptidePair(shared, "DDDDDDDDD", 0, 1, "missense"),
+    )
+    monkeypatch.setattr(pipeline_module, "variant_peptides", lambda _variant: pairs)
+    binder = RecordingBinder()
+
+    run = screen_variants(
+        [parse_famous("BRAF V600E")],
+        "A*02:01",
+        input_name="shared",
+        input_path="famous:BRAF V600E",
+        binder=binder,
+        foreignness_fn=lambda _peptide: 0.75,
+        literature_branch=LITERATURE_STUB,
+        population_draws=8,
+        created_utc="2026-08-24T00:00:00Z",
+    )
+
+    assert validate_results(run.results) is run.results
+    expected_mutants = ("AAAAAAAAA", shared)
+    expected_wild = (shared, "DDDDDDDDD")
+    assert binder.calls == [
+        call
+        for allele in ALLELES
+        for call in ((allele, expected_mutants), (allele, expected_wild))
+    ]
+
+    class ConflictingBinder(RecordingBinder):
+        def __init__(self) -> None:
+            super().__init__()
+            self.returned: set[tuple[str, str]] = set()
+
+        def predict_many(
+            self, peptides: list[str] | tuple[str, ...], allele: str
+        ) -> tuple[BindingPrediction, ...]:
+            predictions = super().predict_many(peptides, allele)
+            values: list[BindingPrediction] = []
+            for prediction in predictions:
+                key = (prediction.peptide, prediction.allele)
+                values.append(
+                    replace(prediction, ic50_nm=prediction.ic50_nm + 1.0)
+                    if key in self.returned
+                    else prediction
+                )
+                self.returned.add(key)
+            return tuple(values)
+
+    with pytest.raises(PipelineError, match="conflicting binder predictions"):
+        screen_variants(
+            [parse_famous("BRAF V600E")],
+            "A*02:01",
+            input_name="conflicting",
+            input_path="famous:BRAF V600E",
+            binder=ConflictingBinder(),
+            foreignness_fn=lambda _peptide: 0.75,
+            literature_branch=LITERATURE_STUB,
+            population_draws=8,
+        )
+
+
 def test_pipeline_batches_default_foreignness_once(monkeypatch) -> None:  # type: ignore[no-untyped-def]
     import keyhole.pipeline as pipeline_module
 
@@ -192,6 +264,25 @@ def test_cli_reuses_pipeline_validation_for_both_outputs(
     assert _write_outputs(run, report, results) == report.resolve()
     assert report.is_file() and results.is_file()
     assert validations == [run.results]
+
+
+def test_pipeline_rejects_incomplete_prediction_batches() -> None:
+    class IncompleteBinder(RecordingBinder):
+        def predict_many(
+            self, peptides: list[str] | tuple[str, ...], allele: str
+        ) -> tuple[BindingPrediction, ...]:
+            return super().predict_many(peptides, allele)[:-1]
+
+    with pytest.raises(PipelineError, match="predictions for"):
+        screen_variants(
+            [parse_famous("BRAF V600E")],
+            "A*02:01",
+            input_name="broken",
+            input_path="famous:BRAF V600E",
+            binder=IncompleteBinder(),
+            literature_branch=LITERATURE_STUB,
+            population_draws=8,
+        )
 
 
 def test_pipeline_refuses_to_invent_missing_canonical_context() -> None:

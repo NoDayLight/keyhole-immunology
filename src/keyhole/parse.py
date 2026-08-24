@@ -3,14 +3,13 @@
 from __future__ import annotations
 
 import csv
-import gzip
 import re
 from collections.abc import Iterator
 from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Literal, TextIO
 
-from keyhole.data import load_famous_proteins
+from keyhole.data import load_famous_proteins, open_text
 
 ProteinSource = Literal["missense", "frameshift"]
 _MISSENSE = re.compile(r"^(?:p\.)?([A-Z])(\d+)([A-Z])$")
@@ -38,12 +37,6 @@ class Variant:
     alternate_amino_acid: str
     sample_id: str = ""
     protein_sequence: str | None = None
-
-
-def _open_text(path: Path) -> TextIO:
-    if path.suffix == ".gz":
-        return gzip.open(path, mode="rt", encoding="utf-8", newline="")
-    return path.open(encoding="utf-8", newline="")
 
 
 def _normalize_chromosome(value: str) -> str:
@@ -139,7 +132,7 @@ def parse_maf(path: str | Path) -> tuple[Variant, ...]:
     """
 
     source_path = Path(path)
-    with _open_text(source_path) as handle:
+    with open_text(source_path) as handle:
         rows = (line for line in handle if not line.startswith("#"))
         reader = csv.DictReader(rows, delimiter="\t")
         required = {
@@ -232,7 +225,7 @@ def parse_vcf(path: str | Path) -> tuple[Variant, ...]:
     """Parse a VCF annotated with GENE/HGVSP or Sequence Ontology ANN."""
 
     source_path = Path(path)
-    with _open_text(source_path) as handle:
+    with open_text(source_path) as handle:
         return tuple(_vcf_records(handle, source_path))
 
 

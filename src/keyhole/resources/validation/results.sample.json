@@ -1,142 +1,118 @@
 {
   "alleles": [
-    "A*02:01",
-    "B*07:02"
+    "A*02:01"
   ],
   "literature": {
     "agreement_stats": {
-      "note": "S0 contract fixture; populated by S5"
+      "by_binding_exposure": {
+        "held_out": {
+          "matched_decoy_evaluable": 0,
+          "matched_decoy_rejected_count": 0,
+          "paired_binding_rank_wins": 0,
+          "positive_split_counts": {
+            "test": 0,
+            "train": 0,
+            "validation": 0
+          },
+          "positive_visible_count": 0,
+          "published_positive_evaluable": 0,
+          "published_positive_total": 0,
+          "synthetic_decoy_binding_roc_auc": null
+        },
+        "not_in_binding_dataset": {
+          "matched_decoy_evaluable": 0,
+          "matched_decoy_rejected_count": 0,
+          "paired_binding_rank_wins": 0,
+          "positive_split_counts": {
+            "test": 0,
+            "train": 0,
+            "validation": 0
+          },
+          "positive_visible_count": 0,
+          "published_positive_evaluable": 0,
+          "published_positive_total": 0,
+          "synthetic_decoy_binding_roc_auc": null
+        },
+        "train": {
+          "matched_decoy_evaluable": 0,
+          "matched_decoy_rejected_count": 0,
+          "paired_binding_rank_wins": 0,
+          "positive_split_counts": {
+            "test": 0,
+            "train": 0,
+            "validation": 0
+          },
+          "positive_visible_count": 0,
+          "published_positive_evaluable": 0,
+          "published_positive_total": 0,
+          "synthetic_decoy_binding_roc_auc": null
+        }
+      },
+      "matched_decoy_evaluable": 0,
+      "matched_decoy_rejected_count": 0,
+      "matched_decoy_rejection_rate": 0.0,
+      "matched_decoy_total": 0,
+      "not_evaluable_by_reason": {},
+      "paired_binding_rank_win_rate": 0.0,
+      "paired_binding_rank_wins": 0,
+      "positive_agreement_rate": 0.0,
+      "positive_invisible_count": 0,
+      "positive_verdict_counts": {
+        "INVISIBLE": 0,
+        "VISIBLE_CLEAR": 0,
+        "VISIBLE_FAINT": 0
+      },
+      "positive_visible_count": 0,
+      "published_positive_evaluable": 0,
+      "published_positive_not_evaluable": 0,
+      "published_positive_total": 0,
+      "synthetic_decoy_binding_roc_auc": null,
+      "unsupported_records": []
     },
-    "entries": []
+    "entries": [],
+    "meta": {
+      "citations": {},
+      "limitations": [],
+      "methods": {},
+      "negative_control": "No controls in the empty contract fixture.",
+      "seed": 1729
+    }
   },
   "meta": {
     "created_utc": "2026-08-24T00:00:00Z",
-    "methods": {
-      "binding": "measured ML — contract field placeholder, no scientific inference in S0 fixture",
-      "cleavage": "heuristic approximation — contract field placeholder",
-      "foreignness": "heuristic approximation — contract field placeholder",
-      "tap": "heuristic approximation — contract field placeholder"
-    },
-    "schema_version": 1,
+    "methods": {},
+    "schema_version": "1.1",
     "seed": 1729,
     "sources": []
   },
-  "mutations": [
-    {
-      "change": "chr7:g.140753336A>T",
-      "gene": "BRAF",
-      "peptides": [
-        {
-          "agretopicity": 3.4,
-          "foreignness": 0.82,
-          "plain_language": "This altered BRAF card is predicted to pass processing, fit A*02:01, and look unlike sampled self proteins.",
-          "position": 3,
-          "reason_codes": [
-            "PASSES_PROCESSING",
-            "STRONG_BINDING",
-            "FOREIGN_LIKE"
-          ],
-          "scores": {
-            "binding": {
-              "A*02:01": {
-                "ic50": 41.2,
-                "rank": 0.4
-              },
-              "B*07:02": {
-                "ic50": 1190.0,
-                "rank": 8.3
-              }
-            },
-            "cleavage": 0.81,
-            "tap": 0.74
-          },
-          "seq": "LATEKSRWSG",
-          "source": "missense",
-          "verdict": "VISIBLE_CLEAR",
-          "wt_seq": "LATVKSRWSG"
-        }
-      ],
-      "protein_effect": "p.V600E"
-    },
-    {
-      "change": "chr12:g.25245350C>T",
-      "gene": "KRAS",
-      "peptides": [
-        {
-          "agretopicity": 1.6,
-          "foreignness": 0.43,
-          "plain_language": "This altered KRAS card may be displayed, but its predicted fit and foreignness are faint.",
-          "position": 7,
-          "reason_codes": [
-            "PASSES_PROCESSING",
-            "BORDERLINE_BINDING",
-            "SELF_LIKE"
-          ],
-          "scores": {
-            "binding": {
-              "A*02:01": {
-                "ic50": 432.0,
-                "rank": 1.9
-              },
-              "B*07:02": {
-                "ic50": 870.0,
-                "rank": 4.1
-              }
-            },
-            "cleavage": 0.61,
-            "tap": 0.58
-          },
-          "seq": "KLVVVGADG",
-          "source": "missense",
-          "verdict": "VISIBLE_FAINT",
-          "wt_seq": "KLVVVGAGG"
-        }
-      ],
-      "protein_effect": "p.G12D"
-    },
-    {
-      "change": "chr17:g.7675088C>T",
-      "gene": "TP53",
-      "peptides": [
-        {
-          "agretopicity": 0.3,
-          "foreignness": 0.12,
-          "plain_language": "This altered TP53 card is predicted not to fit either supplied HLA keyhole strongly enough for display.",
-          "position": 7,
-          "reason_codes": [
-            "WEAK_BINDING",
-            "SELF_LIKE"
-          ],
-          "scores": {
-            "binding": {
-              "A*02:01": {
-                "ic50": 8200.0,
-                "rank": 24.0
-              },
-              "B*07:02": {
-                "ic50": 6100.0,
-                "rank": 19.5
-              }
-            },
-            "cleavage": 0.48,
-            "tap": 0.39
-          },
-          "seq": "HMTEVVRHC",
-          "source": "missense",
-          "verdict": "INVISIBLE",
-          "wt_seq": "HMTEVVRRC"
-        }
-      ],
-      "protein_effect": "p.R175H"
-    }
-  ],
+  "mutations": [],
   "population": {
+    "meta": {
+      "assumption": "Empty contract fixture; no population inference.",
+      "draws": 1,
+      "method": "heuristic approximation",
+      "seed": 1729,
+      "superpopulations": [
+        "AFR",
+        "AMR",
+        "EAS",
+        "EUR"
+      ]
+    },
     "peptide_allele_matrix": {},
     "per_candidate_coverage": {}
   },
   "tumor": {
-    "input": "tests/fixtures/results.sample.json",
-    "name": "S0 contract fixture — not a scientific result",
-    "variant_count": 3
+    "input": "packaged:validation/results.sample.json",
+    "name": "KEYHOLE v1.1 empty contract fixture",
+    "screening": {
+      "ignored_class_count": 0,
+      "input_row_count": 0,
+      "missing_canonical_context_count": 0,
+      "screenable_variant_count": 0,
+      "supported_change_count": 0,
+      "unsupported_frameshift_count": 0
+    },
+    "variant_count": 0
   }
 }

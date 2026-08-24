@@ -3,13 +3,14 @@
 from __future__ import annotations
 
 import math
-from collections.abc import Mapping, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from functools import lru_cache
 
 import numpy as np
 
 from keyhole.bind import AA_ORDER, BLOSUM62, BindingPrediction, FrozenBinder, load_binder
+from keyhole.contracts import binding_order_key, canonical_peptide
 from keyhole.data import iter_self_peptides
 from keyhole.peptides import PeptidePair
 from keyhole.schema import Verdict
@@ -104,10 +105,7 @@ def _sigmoid(value: float) -> float:
 def cleavage_score(peptide: str) -> float:
     """Return a C-terminal PWM-like proteasome heuristic in [0, 1]."""
 
-    if len(peptide) not in {9, 10}:
-        raise ValueError("cleavage scoring requires a 9-mer or 10-mer")
-    if set(peptide) - set(AA_ORDER):
-        raise ValueError("cleavage scoring requires canonical amino acids")
+    peptide = canonical_peptide(peptide, label="cleavage peptide")
     raw = (
         1.25 * _CLEAVAGE_CTERM[peptide[-1]]
         + 0.30 * _CLEAVAGE_CTERM[peptide[-2]]
@@ -119,10 +117,7 @@ def cleavage_score(peptide: str) -> float:
 def tap_score(peptide: str) -> float:
     """Return a position-weighted TAP transport heuristic in [0, 1]."""
 
-    if len(peptide) not in {9, 10}:
-        raise ValueError("TAP scoring requires a 9-mer or 10-mer")
-    if set(peptide) - set(AA_ORDER):
-        raise ValueError("TAP scoring requires canonical amino acids")
+    peptide = canonical_peptide(peptide, label="TAP peptide")
     raw = (
         1.30 * _TAP_CTERM[peptide[-1]]
         + 0.20 * _TAP_CTERM[peptide[0]]
@@ -183,8 +178,7 @@ def foreignness_score(peptide: str, *, self_index: np.ndarray | None = None) -> 
     pooled using the same explicit fixed-width approximation as the binder.
     """
 
-    if len(peptide) not in {9, 10} or set(peptide) - set(AA_ORDER):
-        raise ValueError("foreignness scoring requires a canonical 9-mer or 10-mer")
+    peptide = canonical_peptide(peptide, label="foreignness peptide")
     index = _validate_self_index(self_index)
     query = _query_rows(peptide)
     similarities = np.zeros(len(index), dtype=np.float32)
@@ -198,10 +192,9 @@ def foreignness_scores(
 ) -> tuple[float, ...]:
     """Score peptide queries together with exact scalar-equivalent accumulation."""
 
-    normalized = tuple(peptides)
-    for peptide in normalized:
-        if len(peptide) not in {9, 10} or set(peptide) - set(AA_ORDER):
-            raise ValueError("foreignness scoring requires a canonical 9-mer or 10-mer")
+    normalized = tuple(
+        canonical_peptide(peptide, label="foreignness peptide") for peptide in peptides
+    )
     if not normalized:
         return ()
     index = _validate_self_index(self_index)
@@ -313,6 +306,7 @@ def run_funnel(
     alleles: Sequence[str],
     *,
     binder: FrozenBinder | None = None,
+    foreignness_fn: Callable[[str], float] | None = None,
     self_index: np.ndarray | None = None,
 ) -> FunnelResult:
     """Run one real candidate through heuristic processing and measured-data ML."""
@@ -328,12 +322,21 @@ def run_funnel(
         if pair.wt_seq:
             wild_prediction = model.predict(pair.wt_seq, allele)
             wt_binding[wild_prediction.allele] = wild_prediction
-    best = min(binding.values(), key=lambda item: (item.percentile_rank, item.ic50_nm, item.allele))
+    best = min(
+        binding.values(),
+        key=lambda item: binding_order_key(
+            item.percentile_rank, item.ic50_nm, item.allele
+        ),
+    )
     wild_type = wt_binding.get(best.allele)
     agretopicity = differential_agretopicity(best, wild_type)
     cleavage = cleavage_score(pair.seq)
     tap = tap_score(pair.seq)
-    foreignness = foreignness_score(pair.seq, self_index=self_index)
+    foreignness = (
+        foreignness_score(pair.seq, self_index=self_index)
+        if foreignness_fn is None
+        else foreignness_fn(pair.seq)
+    )
     conclusion, reasons, language = verdict_engine(
         cleavage=cleavage,
         tap=tap,

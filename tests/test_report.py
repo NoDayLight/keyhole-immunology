@@ -10,6 +10,7 @@ from pathlib import Path
 
 import pytest
 
+from keyhole.assets import packaged_file
 from keyhole.bind import ALLELES, BindingPrediction
 from keyhole.data import pdb_path
 from keyhole.parse import parse_famous
@@ -18,18 +19,9 @@ from keyhole.report import SCRIPT_ORDER, render_report, web_root, write_report
 from keyhole.schema import validate_results
 
 WEB = web_root()
-LITERATURE_STUB = {
-    "agreement_stats": {
-        "matched_decoy_evaluable": 0,
-        "matched_decoy_rejected_count": 0,
-        "positive_visible_count": 0,
-        "published_positive_evaluable": 0,
-        "published_positive_total": 0,
-        "synthetic_decoy_binding_roc_auc": 0.0,
-    },
-    "entries": [],
-    "meta": {"citations": {}, "limitations": []},
-}
+LITERATURE_STUB = json.loads(
+    packaged_file("validation/results.sample.json").read_text(encoding="utf-8")
+)["literature"]
 JSON_SCRIPT = re.compile(
     r'<script type="application/json" id="(?P<id>[^"]+)">(?P<body>.*?)</script>',
     re.DOTALL,
@@ -209,6 +201,11 @@ def test_report_rejects_missing_misaligned_or_mistyped_renderer_evidence() -> No
     )
     with pytest.raises(ValueError, match="evaluation_status"):
         render_report(mistyped)
+
+    missing_audit = _fixture()
+    del missing_audit["tumor"]["screening"]
+    with pytest.raises(ValueError, match="screening"):
+        render_report(missing_audit)
 
 
 def test_browser_sources_avoid_atlas_markup_injection_and_clean_up_listeners() -> None:

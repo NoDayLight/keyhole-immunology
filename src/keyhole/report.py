@@ -6,15 +6,14 @@ from __future__ import annotations
 
 import json
 import math
-import re
 from collections.abc import Mapping
 from html import escape
 from pathlib import Path
 
 from keyhole.assets import packaged_directory
-from keyhole.bind import ALLELES
+from keyhole.contracts import PROJECT_SEED, SCHEMA_VERSION
 from keyhole.data import pdb_path
-from keyhole.schema import Verdict, validate_results
+from keyhole.schema import validate_results
 from keyhole.structure import schematic_peptide_scene, structure_payload, summarize_pdb
 
 SCRIPT_ORDER = (
@@ -52,152 +51,6 @@ def _json_text(value: object) -> str:
         .replace("\u2028", "\\u2028")
         .replace("\u2029", "\\u2029")
     )
-
-
-def _report_contract(
-    document: Mapping[str, object], *, schema_validated: bool = False
-) -> dict[str, object]:
-    """Validate additive fields and cross-branch invariants consumed by browser modules."""
-
-    results = dict(document) if schema_validated else validate_results(dict(document))
-
-    def mapping(value: object, path: str) -> dict[str, object]:
-        if not isinstance(value, dict):
-            raise ValueError(f"{path}: report renderer requires an object")
-        return value
-
-    def sequence(value: object, path: str) -> list[object]:
-        if not isinstance(value, list):
-            raise ValueError(f"{path}: report renderer requires an array")
-        return value
-
-    def required(value: dict[str, object], names: set[str], path: str) -> None:
-        missing = names - value.keys()
-        if missing:
-            raise ValueError(f"{path}: missing report fields: {', '.join(sorted(missing))}")
-
-    def number(value: object, path: str, low: float, high: float) -> float:
-        if isinstance(value, bool) or not isinstance(value, int | float):
-            raise ValueError(f"{path}: report renderer requires a number")
-        result = float(value)
-        if not math.isfinite(result) or not low <= result <= high:
-            raise ValueError(f"{path}: value must be finite and in [{low}, {high}]")
-        return result
-
-    def text(value: object, path: str) -> str:
-        if not isinstance(value, str) or not value:
-            raise ValueError(f"{path}: report renderer requires non-empty text")
-        return value
-
-    alleles = sequence(results["alleles"], "results.alleles")
-    if len(set(alleles)) != len(alleles) or any(allele not in ALLELES for allele in alleles):
-        raise ValueError("results.alleles: report requires unique supported HLA-A/B alleles")
-    candidate_keys: list[str] = []
-    for mutation_index, mutation_value in enumerate(sequence(results["mutations"], "results.mutations")):
-        mutation = mapping(mutation_value, f"results.mutations[{mutation_index}]")
-        for peptide_index, peptide_value in enumerate(sequence(mutation["peptides"], "mutation.peptides")):
-            path = f"results.mutations[{mutation_index}].peptides[{peptide_index}]"
-            peptide = mapping(peptide_value, path)
-            required(peptide, {"best_allele", "candidate_key"}, path)
-            candidate_key = peptide["candidate_key"]
-            if not isinstance(candidate_key, str) or not re.fullmatch(r"[A-Z]{9,10}(?:#[2-9][0-9]*)?", candidate_key):
-                raise ValueError(f"{path}.candidate_key: invalid stable candidate key")
-            if not candidate_key.startswith(str(peptide["seq"])):
-                raise ValueError(f"{path}.candidate_key: must be derived from peptide sequence")
-            bindings = mapping(mapping(peptide["scores"], f"{path}.scores")["binding"], f"{path}.scores.binding")
-            if set(bindings) != set(alleles):
-                raise ValueError(f"{path}.scores.binding: must match user-supplied alleles")
-            if peptide["best_allele"] not in bindings:
-                raise ValueError(f"{path}.best_allele: missing serialized binding evidence")
-            best_allele = min(
-                bindings,
-                key=lambda allele: (
-                    float(mapping(bindings[allele], f"{path}.scores.binding.{allele}")["rank"]),
-                    float(mapping(bindings[allele], f"{path}.scores.binding.{allele}")["ic50"]),
-                    allele,
-                ),
-            )
-            if peptide["best_allele"] != best_allele:
-                raise ValueError(f"{path}.best_allele: does not match serialized binding winner")
-            candidate_keys.append(candidate_key)
-    if len(candidate_keys) != len(set(candidate_keys)):
-        raise ValueError("results.mutations: candidate keys must be globally unique")
-
-    population = mapping(results["population"], "results.population")
-    required(population, {"meta"}, "results.population")
-    population_meta = mapping(population["meta"], "results.population.meta")
-    required(population_meta, {"assumption", "draws", "method", "seed"}, "results.population.meta")
-    text(population_meta["assumption"], "results.population.meta.assumption")
-    text(population_meta["method"], "results.population.meta.method")
-    number(population_meta["draws"], "results.population.meta.draws", 1.0, math.inf)
-    number(population_meta["seed"], "results.population.meta.seed", 0.0, math.inf)
-    coverage = mapping(population["per_candidate_coverage"], "results.population.per_candidate_coverage")
-    matrix = mapping(population["peptide_allele_matrix"], "results.population.peptide_allele_matrix")
-    if set(coverage) != set(candidate_keys) or set(matrix) != set(candidate_keys):
-        raise ValueError("results.population: candidate keys must align with mutation peptides")
-    population_names = {"AFR", "AMR", "EAS", "EUR", "ALL_OBSERVED"}
-    for candidate_key in candidate_keys:
-        values = mapping(coverage[candidate_key], f"coverage.{candidate_key}")
-        if set(values) != population_names:
-            raise ValueError(f"coverage.{candidate_key}: expected four cohorts and ALL_OBSERVED")
-        for name, value in values.items():
-            number(value, f"coverage.{candidate_key}.{name}", 0.0, 100.0)
-        cells = mapping(matrix[candidate_key], f"matrix.{candidate_key}")
-        if set(cells) != set(ALLELES):
-            raise ValueError(f"matrix.{candidate_key}: expected all 26 modeled alleles")
-        for allele, cell_value in cells.items():
-            cell = mapping(cell_value, f"matrix.{candidate_key}.{allele}")
-            required(cell, {"ic50", "method", "rank", "reason_codes", "verdict", "visible"}, f"matrix.{candidate_key}.{allele}")
-            number(cell["ic50"], f"matrix.{candidate_key}.{allele}.ic50", 0.0, math.inf)
-            number(cell["rank"], f"matrix.{candidate_key}.{allele}.rank", 0.0, 100.0)
-            text(cell["method"], f"matrix.{candidate_key}.{allele}.method")
-            sequence(cell["reason_codes"], f"matrix.{candidate_key}.{allele}.reason_codes")
-            if not isinstance(cell["visible"], bool) or cell["verdict"] not in set(Verdict):
-                raise ValueError(f"matrix.{candidate_key}.{allele}: invalid visibility evidence")
-
-    literature = mapping(results["literature"], "results.literature")
-    required(literature, {"meta"}, "results.literature")
-    literature_meta = mapping(literature["meta"], "results.literature.meta")
-    required(literature_meta, {"citations", "limitations"}, "results.literature.meta")
-    citations = mapping(literature_meta["citations"], "results.literature.meta.citations")
-    for name, citation in citations.items():
-        text(name, "results.literature.meta.citations.<name>")
-        text(citation, f"results.literature.meta.citations.{name}")
-    limitations = sequence(literature_meta["limitations"], "results.literature.meta.limitations")
-    for index, limitation in enumerate(limitations):
-        text(limitation, f"results.literature.meta.limitations[{index}]")
-    stats = mapping(literature["agreement_stats"], "results.literature.agreement_stats")
-    count_names = {"matched_decoy_evaluable", "matched_decoy_rejected_count", "positive_visible_count", "published_positive_evaluable", "published_positive_total"}
-    required(stats, count_names | {"synthetic_decoy_binding_roc_auc"}, "results.literature.agreement_stats")
-    for name in count_names:
-        number(stats[name], f"results.literature.agreement_stats.{name}", 0.0, math.inf)
-    number(stats["synthetic_decoy_binding_roc_auc"], "results.literature.agreement_stats.synthetic_decoy_binding_roc_auc", 0.0, 1.0)
-    for entry_index, entry_value in enumerate(sequence(literature["entries"], "results.literature.entries")):
-        path = f"results.literature.entries[{entry_index}]"
-        entry = mapping(entry_value, path)
-        required(entry, {"allele", "binder_split", "binding_dataset_overlap", "evaluation_status", "external_facts", "matched_negative", "peptide", "prediction"}, path)
-        for name in ("allele", "binder_split", "evaluation_status", "peptide"):
-            text(entry[name], f"{path}.{name}")
-        if not isinstance(entry["binding_dataset_overlap"], bool):
-            raise ValueError(f"{path}.binding_dataset_overlap: report renderer requires a boolean")
-        facts = mapping(entry["external_facts"], f"{path}.external_facts")
-        required(facts, {"assay_result", "pmid", "reference_title"}, f"{path}.external_facts")
-        for name in ("assay_result", "pmid", "reference_title"):
-            text(facts[name], f"{path}.external_facts.{name}")
-        prediction = mapping(entry["prediction"], f"{path}.prediction")
-        required(prediction, {"plain_language", "verdict"}, f"{path}.prediction")
-        text(prediction["plain_language"], f"{path}.prediction.plain_language")
-        if prediction["verdict"] is not None:
-            text(prediction["verdict"], f"{path}.prediction.verdict")
-        negative = mapping(entry["matched_negative"], f"{path}.matched_negative")
-        required(negative, {"peptide", "prediction"}, f"{path}.matched_negative")
-        text(negative["peptide"], f"{path}.matched_negative.peptide")
-        negative_prediction = mapping(negative["prediction"], f"{path}.matched_negative.prediction")
-        required(negative_prediction, {"plain_language", "verdict"}, f"{path}.matched_negative.prediction")
-        text(negative_prediction["plain_language"], f"{path}.matched_negative.prediction.plain_language")
-        if negative_prediction["verdict"] is not None:
-            text(negative_prediction["verdict"], f"{path}.matched_negative.prediction.verdict")
-    return results
 
 
 def _compact_pdb_text(pdb_text: str, display_chains: set[str]) -> str:
@@ -286,7 +139,8 @@ def _report_structure_payload(pdb_id: str) -> dict[str, object]:
     return payload
 
 
-def _scene_envelope(results: Mapping[str, object]) -> dict[str, object]:
+def assemble_report_scenes(results: Mapping[str, object]) -> dict[str, object]:
+    """Assemble report-only structures and candidate scene payloads."""
     structures = {
         pdb_id: _report_structure_payload(pdb_id) for pdb_id in ("1HHK", "3PWN", "1AO7")
     }
@@ -315,8 +169,8 @@ def _render_report(
 ) -> str:
     """Render a result into one network-free, sidecar-free HTML string."""
 
-    results = _report_contract(document, schema_validated=schema_validated)
-    scenes = _scene_envelope(results)
+    results = dict(document) if schema_validated else validate_results(dict(document))
+    scenes = assemble_report_scenes(results)
     root = web_root()
     scripts = "\n".join(
         f"/* inline:{name} */\n{(root / name).read_text(encoding='utf-8')}"
@@ -324,7 +178,7 @@ def _render_report(
     )
     tumor = results["tumor"]
     assert isinstance(tumor, dict)
-    screening = tumor.get("screening", {})
+    screening = tumor["screening"]
     assert isinstance(screening, dict)
     mutation_count = len(results["mutations"])
     candidate_count = sum(len(item["peptides"]) for item in results["mutations"])
@@ -352,7 +206,7 @@ def _render_report(
 <section id="literature" class="panel"><h2>Published-positive agreement panel</h2><p class="caveat">Published T-cell positivity and KEYHOLE visibility are different endpoints; synthetic controls are not assayed negatives.</p><div id="theater-app"></div></section>
 <section id="methods" class="panel"><h2>Methods, citations, and limits</h2><div id="methods-app"></div></section>
 <noscript><strong>JavaScript is disabled.</strong> This offline file still contains {mutation_count} mutations and {candidate_count} validated candidates, all three PDB coordinate files, and complete citations; local JavaScript is required only for interactive rendering.</noscript></main>
-<footer>KEYHOLE schema v1 · deterministic seed 1729 · generated {escape(str(results['meta']['created_utc']))} · offline after creation</footer>
+<footer>KEYHOLE schema v{SCHEMA_VERSION} · deterministic seed {PROJECT_SEED} · generated {escape(str(results['meta']['created_utc']))} · offline after creation</footer>
 <script type="application/json" id="keyhole-results">{_json_text(results)}</script>
 <script type="application/json" id="keyhole-scenes">{_json_text(scenes)}</script>
 <script>{scripts}</script></body></html>"""

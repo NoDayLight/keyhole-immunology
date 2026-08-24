@@ -24,38 +24,16 @@ import torch
 from torch import nn
 
 from keyhole.assets import packaged_directory
+from keyhole.contracts import (
+    PROJECT_SEED,
+    SUPPORTED_ALLELES,
+    canonical_peptide,
+    normalize_allele,
+)
 from keyhole.data import BindingRecord, data_root, iter_binding_records, iter_self_peptides
 
-SEED = 1729
 AA_ORDER = "ARNDCQEGHILKMFPSTWYV"
-ALLELES = (
-    "A*01:01",
-    "A*02:01",
-    "A*03:01",
-    "A*11:01",
-    "A*23:01",
-    "A*24:02",
-    "A*29:02",
-    "A*30:01",
-    "A*30:02",
-    "A*31:01",
-    "A*33:01",
-    "A*68:01",
-    "B*07:02",
-    "B*08:01",
-    "B*15:01",
-    "B*18:01",
-    "B*27:05",
-    "B*35:01",
-    "B*40:01",
-    "B*44:02",
-    "B*44:03",
-    "B*46:01",
-    "B*51:01",
-    "B*53:01",
-    "B*57:01",
-    "B*58:01",
-)
+ALLELES = SUPPORTED_ALLELES
 ARTIFACT_DIRECTORY = "iedb/binder"
 MODEL_CARD_NAME = "model_card.json"
 METRICS_NAME = "metrics.json"
@@ -145,15 +123,7 @@ class BindingMLP(nn.Module):
 
 
 def _validate_peptide(peptide: str) -> str:
-    if not isinstance(peptide, str):
-        raise TypeError("peptide must be a string")
-    peptide = peptide.strip().upper()
-    if len(peptide) not in {9, 10}:
-        raise ValueError("binding peptides must contain exactly 9 or 10 residues")
-    invalid = sorted(set(peptide) - set(AA_ORDER))
-    if invalid:
-        raise ValueError(f"peptide contains non-canonical residues: {''.join(invalid)}")
-    return peptide
+    return canonical_peptide(peptide, label="binding peptide")
 
 
 def encode_peptide(peptide: str) -> np.ndarray:
@@ -177,7 +147,7 @@ def encode_peptide(peptide: str) -> np.ndarray:
     return np.ascontiguousarray(encoded, dtype=np.float32)
 
 
-def assign_split(peptide: str, seed: int = SEED) -> str:
+def assign_split(peptide: str, seed: int = PROJECT_SEED) -> str:
     """Assign a peptide globally to train/validation/test using an 80/10/10 hash."""
 
     peptide = _validate_peptide(peptide)
@@ -195,9 +165,7 @@ def assign_split(peptide: str, seed: int = SEED) -> str:
 def _normalize_supported_allele(allele: str) -> str:
     if not isinstance(allele, str):
         raise TypeError("allele must be a string")
-    normalized = allele.strip().upper()
-    if normalized.startswith("HLA-"):
-        normalized = normalized[4:]
+    normalized = normalize_allele(allele)
     if normalized not in ALLELES:
         raise ValueError(f"unsupported allele: {allele!r}")
     return normalized
@@ -223,14 +191,14 @@ def _validated_records() -> list[BindingRecord]:
 
 
 def _configure_deterministic_torch() -> None:
-    torch.manual_seed(SEED)
+    torch.manual_seed(PROJECT_SEED)
     torch.use_deterministic_algorithms(True)
     torch.set_num_threads(1)
 
 
 def _allele_seed(allele: str) -> int:
     digest = hashlib.sha256(
-        f"{SEED}:model:{allele}".encode("ascii"), usedforsecurity=False
+        f"{PROJECT_SEED}:model:{allele}".encode("ascii"), usedforsecurity=False
     ).digest()
     return int.from_bytes(digest[:4], "big")
 
@@ -434,7 +402,7 @@ def _heldout_metrics(
 def _calibration_peptides(size: int) -> list[str]:
     if size != CALIBRATION_SIZE:
         raise ValueError(f"calibration size is frozen at {CALIBRATION_SIZE}")
-    selected_indices = set(random.Random(SEED).sample(range(500_000), size))
+    selected_indices = set(random.Random(PROJECT_SEED).sample(range(500_000), size))
     selected: list[str] = []
     observed_count = 0
     for observed_count, peptide in enumerate(iter_self_peptides(), start=1):
@@ -565,8 +533,11 @@ def train_binder(
                 "percent of fixed self predictions at or below candidate IC50; lower is better"
             ),
             "sample_size": CALIBRATION_SIZE,
-            "sampling": "random.Random(1729).sample(range(500000), 10000), sorted by source order",
-            "source": "frozen seed-1729 UniProt human self-peptidome sample",
+            "sampling": (
+                f"random.Random({PROJECT_SEED}).sample(range(500000), 10000), "
+                "sorted by source order"
+            ),
+            "source": f"frozen seed-{PROJECT_SEED} UniProt human self-peptidome sample",
         },
         "censoring": {
             "approximation": (
@@ -593,11 +564,18 @@ def train_binder(
         ),
         "format_version": 1,
         "output": "log10 IC50 nM; clipping only while converting to positive physical IC50",
-        "seed": SEED,
+        "seed": PROJECT_SEED,
         "split": {
-            "assignment": "first 8 SHA256 bytes of '1729:'+peptide modulo 10000",
+            "assignment": (
+                f"first 8 SHA256 bytes of '{PROJECT_SEED}:'+peptide modulo 10000"
+            ),
             "fractions": {"test": 0.1, "train": 0.8, "validation": 0.1},
             "scope": "global peptide identity before allele grouping",
+            "validation_usage": (
+                "Reserved by deterministic assignment but unused for training, model "
+                "selection, early stopping, hyperparameter tuning, calibration, or "
+                "reported test metrics."
+            ),
         },
         "training": {
             "device": "cpu",

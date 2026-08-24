@@ -17,7 +17,12 @@ from keyhole.parse import parse_famous
 from keyhole.pipeline import InputAudit, normalize_hla_list, screen_path, screen_variants
 from keyhole.population import frequency_panels
 from keyhole.report import _write_validated_report
-from keyhole.schema import _dump_validated_results, validate_results
+from keyhole.schema import (
+    PROJECT_SEED,
+    SCHEMA_VERSION,
+    _dump_validated_results,
+    validate_results,
+)
 from keyhole.structure import summarize_pdb
 
 
@@ -66,8 +71,8 @@ def _quick_validation() -> dict[str, object]:
         "heldout_metrics": "skipped (--quick)",
         "literature_records": len(literature),
         "populations": sorted({panel.superpopulation for panel in panels}),
-        "schema": 1,
-        "seed": 1729,
+        "schema": SCHEMA_VERSION,
+        "seed": PROJECT_SEED,
         "structures": [summary.pdb_id for summary in structures],
         "status": "OK",
     }
@@ -82,7 +87,7 @@ def _run_validate(args: argparse.Namespace) -> int:
     else:
         print("KEYHOLE validation: OK")
         print(
-            "schema=1 seed=1729 binder_models=26 structures=3 "
+            f"schema={SCHEMA_VERSION} seed={PROJECT_SEED} binder_models=26 structures=3 "
             "populations=AFR,AMR,EAS,EUR"
         )
         if args.quick:

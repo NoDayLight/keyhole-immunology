@@ -13,8 +13,9 @@ from pathlib import Path
 from typing import TextIO
 
 from keyhole.assets import packaged_directory, safe_child
+from keyhole.contracts import CANONICAL_AMINO_ACIDS, normalize_allele
 
-CANONICAL_AMINO_ACIDS = frozenset("ACDEFGHIKLMNPQRSTVWY")
+__all__ = ["CANONICAL_AMINO_ACIDS", "normalize_allele"]
 
 
 @dataclass(frozen=True, slots=True)
@@ -76,19 +77,11 @@ def asset_path(relative: str) -> Path:
     return path
 
 
-def _open_text(path: Path) -> TextIO:
+def open_text(path: Path) -> TextIO:
+    """Open plain or gzip-compressed UTF-8 text with stable newline handling."""
     if path.suffix == ".gz":
         return gzip.open(path, mode="rt", encoding="utf-8", newline="")
     return path.open(encoding="utf-8", newline="")
-
-
-def normalize_allele(allele: str) -> str:
-    """Normalize an HLA name to the schema's two-field display form."""
-
-    value = allele.strip().upper()
-    if value.startswith("HLA-"):
-        value = value[4:]
-    return value
 
 
 def iter_binding_records(
@@ -98,7 +91,7 @@ def iter_binding_records(
 
     selected = {normalize_allele(value) for value in alleles} if alleles else None
     emitted = 0
-    with _open_text(asset_path("iedb/mhci_binding_9_10mer.tsv.gz")) as handle:
+    with open_text(asset_path("iedb/mhci_binding_9_10mer.tsv.gz")) as handle:
         for row in csv.DictReader(handle, delimiter="\t"):
             allele = normalize_allele(row["hla_allele"])
             if selected is not None and allele not in selected:
@@ -117,7 +110,7 @@ def iter_binding_records(
 def iter_self_peptides(*, limit: int | None = None) -> Iterator[str]:
     """Stream the deterministic 500,000-peptide human self sample."""
 
-    with _open_text(asset_path("self_peptidome/up000005640_human_9mers.txt.gz")) as handle:
+    with open_text(asset_path("self_peptidome/up000005640_human_9mers.txt.gz")) as handle:
         for index, line in enumerate(handle):
             if limit is not None and index >= limit:
                 return
@@ -131,7 +124,7 @@ def load_hla_frequencies() -> tuple[FrequencyRecord, ...]:
 
     records: list[FrequencyRecord] = []
     path = asset_path("hla_freq/1000g_hla_ab_two_field_frequencies.tsv")
-    with _open_text(path) as handle:
+    with open_text(path) as handle:
         for row in csv.DictReader(handle, delimiter="\t"):
             records.append(
                 FrequencyRecord(
@@ -152,7 +145,7 @@ def load_literature_records() -> tuple[LiteratureRecord, ...]:
     """Load the ten frozen positive tumor epitope/HLA records."""
 
     records: list[LiteratureRecord] = []
-    with _open_text(asset_path("literature/tumor_epitopes.tsv")) as handle:
+    with open_text(asset_path("literature/tumor_epitopes.tsv")) as handle:
         for row in csv.DictReader(handle, delimiter="\t"):
             records.append(
                 LiteratureRecord(

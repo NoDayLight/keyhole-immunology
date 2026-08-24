@@ -35,7 +35,7 @@ def test_validate_json_is_machine_readable(monkeypatch, capsys) -> None:  # type
     expected = {
         "binder_models": 26,
         "heldout_metrics": "skipped (--quick)",
-        "schema": 1,
+        "schema": "1.1",
         "seed": 1729,
         "status": "OK",
     }

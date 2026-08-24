@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import gzip
 import math
 import os
 from collections import Counter
@@ -13,20 +12,18 @@ from pathlib import Path
 from typing import Protocol
 
 from keyhole.bind import ALLELES, BindingPrediction, load_binder
+from keyhole.data import normalize_allele, open_text
 from keyhole.funnel import (
     CITATIONS,
     METHOD_LABELS,
     FunnelResult,
-    cleavage_score,
-    differential_agretopicity,
     foreignness_score,
     foreignness_scores,
-    tap_score,
-    verdict_engine,
+    run_funnel,
 )
 from keyhole.literature import evaluate_literature_panel
 from keyhole.parse import Variant, load_variants
-from keyhole.peptides import PeptidePair, variant_peptides
+from keyhole.peptides import variant_peptides
 from keyhole.population import ASSUMPTION, DEFAULT_DRAWS, population_summary
 from keyhole.schema import PROJECT_SEED, SCHEMA_VERSION, validate_results
 
@@ -83,9 +80,7 @@ def normalize_hla_list(value: str | Sequence[str]) -> tuple[str, ...]:
     raw = value.split(",") if isinstance(value, str) else value
     normalized: list[str] = []
     for item in raw:
-        allele = item.strip().upper()
-        if allele.startswith("HLA-"):
-            allele = allele[4:]
+        allele = normalize_allele(item)
         if not allele:
             continue
         if allele not in ALLELES:
@@ -98,14 +93,8 @@ def normalize_hla_list(value: str | Sequence[str]) -> tuple[str, ...]:
     return tuple(normalized)
 
 
-def _open_input(path: Path):  # type: ignore[no-untyped-def]
-    if path.suffix == ".gz":
-        return gzip.open(path, mode="rt", encoding="utf-8", newline="")
-    return path.open(encoding="utf-8", newline="")
-
-
 def _input_row_count(path: Path) -> int:
-    with _open_input(path) as handle:
+    with open_text(path) as handle:
         if path.name.lower().endswith((".maf", ".maf.gz")):
             lines = [line for line in handle if not line.startswith("#")]
             return max(0, len(lines) - 1)
@@ -158,44 +147,43 @@ def _stable_unique(values: Sequence[str]) -> tuple[str, ...]:
     return tuple(dict.fromkeys(values))
 
 
-def _funnel_result(
-    pair: PeptidePair,
-    alleles: Sequence[str],
-    predictions: Mapping[tuple[str, str], BindingPrediction],
-    evidence: Mapping[str, tuple[float, float, float]],
-) -> FunnelResult:
-    binding = {allele: predictions[(pair.seq, allele)] for allele in alleles}
-    wt_binding = (
-        {allele: predictions[(pair.wt_seq, allele)] for allele in alleles}
-        if pair.wt_seq
-        else {}
-    )
-    best = min(binding.values(), key=lambda item: (item.percentile_rank, item.ic50_nm, item.allele))
-    wild_type = wt_binding.get(best.allele)
-    agretopicity = differential_agretopicity(best, wild_type)
-    cleavage, tap, foreignness = evidence[pair.seq]
-    verdict, reasons, language = verdict_engine(
-        cleavage=cleavage,
-        tap=tap,
-        binding_rank=best.percentile_rank,
-        binding_ic50=best.ic50_nm,
-        foreignness=foreignness,
-        agretopicity=agretopicity,
-        has_wt=wild_type is not None,
-    )
-    return FunnelResult(
-        pair=pair,
-        binding=binding,
-        wt_binding=wt_binding,
-        cleavage=cleavage,
-        tap=tap,
-        agretopicity=agretopicity,
-        foreignness=foreignness,
-        best_allele=best.allele,
-        verdict=verdict,
-        reason_codes=reasons,
-        plain_language=language,
-    )
+@dataclass(frozen=True, slots=True)
+class _PrecomputedBinder:
+    predictions: Mapping[tuple[str, str], BindingPrediction]
+
+    def predict(self, peptide: str, allele: str) -> BindingPrediction:
+        key = (peptide, normalize_allele(allele))
+        try:
+            return self.predictions[key]
+        except KeyError as error:
+            raise PipelineError(
+                f"missing precomputed binding prediction for {key[0]} and {key[1]}"
+            ) from error
+
+
+def _record_prediction_batch(
+    destination: dict[tuple[str, str], BindingPrediction],
+    model: BatchBinder,
+    peptides: Sequence[str],
+    allele: str,
+) -> None:
+    batch = tuple(model.predict_many(peptides, allele))
+    if len(batch) != len(peptides):
+        raise PipelineError(
+            f"binder returned {len(batch)} predictions for {len(peptides)} requested peptides"
+        )
+    for expected, prediction in zip(peptides, batch, strict=True):
+        if prediction.peptide != expected or prediction.allele != allele:
+            raise PipelineError(
+                "binder prediction order, peptide identity, or allele did not match the request"
+            )
+        key = (prediction.peptide, prediction.allele)
+        previous = destination.get(key)
+        if previous is not None and previous != prediction:
+            raise PipelineError(
+                f"conflicting binder predictions for {key[0]} and {key[1]}"
+            )
+        destination[key] = prediction
 
 
 def _serialize_peptide(result: FunnelResult, candidate_key: str) -> dict[str, object]:
@@ -265,10 +253,8 @@ def screen_variants(
     model = load_binder() if binder is None else binder
     predictions: dict[tuple[str, str], BindingPrediction] = {}
     for allele in ALLELES:
-        for prediction in model.predict_many(mutant_sequences, allele):
-            predictions[(prediction.peptide, prediction.allele)] = prediction
-        for prediction in model.predict_many(wild_sequences, allele):
-            predictions[(prediction.peptide, prediction.allele)] = prediction
+        _record_prediction_batch(predictions, model, mutant_sequences, allele)
+        _record_prediction_batch(predictions, model, wild_sequences, allele)
 
     if foreignness_fn is foreignness_score:
         foreignness_values = dict(
@@ -278,15 +264,24 @@ def screen_variants(
         foreignness_values = {
             peptide: foreignness_fn(peptide) for peptide in mutant_sequences
         }
-    evidence = {
-        peptide: (cleavage_score(peptide), tap_score(peptide), foreignness_values[peptide])
-        for peptide in mutant_sequences
-    }
+    adapter = _PrecomputedBinder(predictions)
     user_results = tuple(
-        _funnel_result(pair, user_alleles, predictions, evidence) for pair in all_pairs
+        run_funnel(
+            pair,
+            user_alleles,
+            binder=adapter,  # type: ignore[arg-type]
+            foreignness_fn=foreignness_values.__getitem__,
+        )
+        for pair in all_pairs
     )
     population_results = tuple(
-        _funnel_result(pair, ALLELES, predictions, evidence) for pair in all_pairs
+        run_funnel(
+            pair,
+            ALLELES,
+            binder=adapter,  # type: ignore[arg-type]
+            foreignness_fn=foreignness_values.__getitem__,
+        )
+        for pair in all_pairs
     )
     population = population_summary(population_results, draws=population_draws)
     literature = (

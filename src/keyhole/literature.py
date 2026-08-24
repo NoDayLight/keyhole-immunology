@@ -4,18 +4,21 @@ from __future__ import annotations
 
 import hashlib
 import random
+from collections import Counter
 from collections.abc import Iterable, Sequence
+from dataclasses import dataclass, field
 from functools import lru_cache
 from typing import Protocol
 
 import numpy as np
 
-from keyhole.bind import (
-    ALLELES,
-    BindingPrediction,
-    assign_split,
-    load_binder,
-    roc_auc,
+from keyhole.bind import BindingPrediction, assign_split, load_binder
+from keyhole.contracts import (
+    PROJECT_SEED,
+    SUPPORTED_ALLELES,
+    binary_roc_auc,
+    binding_exposure,
+    canonical_peptide,
 )
 from keyhole.data import LiteratureRecord, iter_binding_records, load_literature_records
 from keyhole.funnel import (
@@ -26,7 +29,7 @@ from keyhole.funnel import (
     tap_score,
     verdict_engine,
 )
-from keyhole.schema import PROJECT_SEED, Verdict
+from keyhole.schema import Verdict
 
 IEDB_CITATION = (
     "Vita R et al. The Immune Epitope Database (IEDB): 2018 update. "
@@ -52,8 +55,7 @@ def generate_matched_negative(
 ) -> str:
     """Return a deterministic length- and composition-matched shuffled control."""
 
-    if len(peptide) not in {9, 10} or not peptide.isalpha() or not peptide.isupper():
-        raise ValueError("matched controls require an uppercase 9-mer or 10-mer")
+    peptide = canonical_peptide(peptide, label="matched control peptide")
     excluded = set(forbidden) | {peptide}
     digest = hashlib.sha256(
         f"{seed}:literature-negative:{allele}:{peptide}".encode("ascii"),
@@ -101,7 +103,7 @@ def _score_peptide(
             "method": METHOD_LABELS["agretopicity"],
         },
     }
-    if allele not in ALLELES:
+    if allele not in SUPPORTED_ALLELES:
         base.update(
             {
                 "binding": None,
@@ -156,6 +158,82 @@ def _rate(numerator: int, denominator: int) -> float:
     return round(numerator / denominator, 6) if denominator else 0.0
 
 
+@dataclass(slots=True)
+class _AgreementAccumulator:
+    positive_total: int = 0
+    positive_verdicts: list[Verdict] = field(default_factory=list)
+    decoy_verdicts: list[Verdict] = field(default_factory=list)
+    positive_ranks: list[float] = field(default_factory=list)
+    decoy_ranks: list[float] = field(default_factory=list)
+    paired_rank_wins: int = 0
+    split_counts: Counter[str] = field(default_factory=Counter)
+
+    def add(
+        self,
+        *,
+        split: str,
+        positive_binding: BindingPrediction | None,
+        positive_verdict: Verdict | None,
+        decoy_binding: BindingPrediction | None,
+        decoy_verdict: Verdict | None,
+    ) -> None:
+        self.positive_total += 1
+        self.split_counts[split] += 1
+        if positive_binding is None:
+            return
+        assert positive_verdict is not None
+        assert decoy_binding is not None and decoy_verdict is not None
+        self.positive_verdicts.append(positive_verdict)
+        self.decoy_verdicts.append(decoy_verdict)
+        self.positive_ranks.append(positive_binding.percentile_rank)
+        self.decoy_ranks.append(decoy_binding.percentile_rank)
+        if positive_binding.percentile_rank < decoy_binding.percentile_rank:
+            self.paired_rank_wins += 1
+
+    def summary(self, *, aggregate: bool = False) -> dict[str, object]:
+        visible = {Verdict.VISIBLE_CLEAR, Verdict.VISIBLE_FAINT}
+        evaluable = len(self.positive_verdicts)
+        visible_count = sum(verdict in visible for verdict in self.positive_verdicts)
+        rejected = sum(verdict is Verdict.INVISIBLE for verdict in self.decoy_verdicts)
+        labels = [True] * evaluable + [False] * evaluable
+        scores = [-rank for rank in self.positive_ranks + self.decoy_ranks]
+        values: dict[str, object] = {
+            "published_positive_total": self.positive_total,
+            "published_positive_evaluable": evaluable,
+            "positive_visible_count": visible_count,
+            "matched_decoy_evaluable": len(self.decoy_verdicts),
+            "matched_decoy_rejected_count": rejected,
+            "paired_binding_rank_wins": self.paired_rank_wins,
+            "positive_split_counts": {
+                name: self.split_counts[name] for name in ("train", "validation", "test")
+            },
+            "synthetic_decoy_binding_roc_auc": (
+                round(binary_roc_auc(labels, scores), 6) if evaluable else None
+            ),
+        }
+        if aggregate:
+            values.update(
+                {
+                    "published_positive_not_evaluable": self.positive_total - evaluable,
+                    "positive_invisible_count": evaluable - visible_count,
+                    "positive_agreement_rate": _rate(visible_count, evaluable),
+                    "positive_verdict_counts": {
+                        verdict.value: self.positive_verdicts.count(verdict)
+                        for verdict in Verdict
+                    },
+                    "matched_decoy_total": self.positive_total,
+                    "matched_decoy_rejection_rate": _rate(
+                        rejected, len(self.decoy_verdicts)
+                    ),
+                    "paired_binding_rank_win_rate": _rate(
+                        self.paired_rank_wins, evaluable
+                    ),
+                }
+            )
+            values.pop("positive_split_counts")
+        return values
+
+
 def evaluate_literature_panel(
     records: Sequence[LiteratureRecord] | None = None,
     *,
@@ -175,11 +253,11 @@ def evaluate_literature_panel(
     source_pairs = _binding_source_pairs()
     forbidden = {record.peptide for record in panel}
     entries: list[dict[str, object]] = []
-    positive_verdicts: list[Verdict] = []
-    decoy_verdicts: list[Verdict] = []
-    positive_ranks: list[float] = []
-    decoy_ranks: list[float] = []
-    paired_rank_wins = 0
+    aggregate = _AgreementAccumulator()
+    by_exposure = {
+        name: _AgreementAccumulator()
+        for name in ("train", "held_out", "not_in_binding_dataset")
+    }
     unsupported: list[dict[str, str]] = []
 
     for record in panel:
@@ -203,16 +281,18 @@ def evaluate_literature_panel(
             self_index=self_index,
         )
         evaluable = positive_binding is not None
-        if evaluable:
-            assert positive_verdict is not None
-            assert decoy_binding is not None and decoy_verdict is not None
-            positive_verdicts.append(positive_verdict)
-            decoy_verdicts.append(decoy_verdict)
-            positive_ranks.append(positive_binding.percentile_rank)
-            decoy_ranks.append(decoy_binding.percentile_rank)
-            if positive_binding.percentile_rank < decoy_binding.percentile_rank:
-                paired_rank_wins += 1
-        else:
+        split = assign_split(record.peptide)
+        overlap = (record.peptide, record.allele) in source_pairs
+        exposure = binding_exposure(overlap, split)
+        for accumulator in (aggregate, by_exposure[exposure]):
+            accumulator.add(
+                split=split,
+                positive_binding=positive_binding,
+                positive_verdict=positive_verdict,
+                decoy_binding=decoy_binding,
+                decoy_verdict=decoy_verdict,
+            )
+        if not evaluable:
             unsupported.append({"allele": record.allele, "peptide": record.peptide})
 
         entries.append(
@@ -225,8 +305,8 @@ def evaluate_literature_panel(
                 },
                 "external_facts": _external_facts(record),
                 "evaluation_status": "evaluable" if evaluable else "not_evaluable",
-                "binding_dataset_overlap": (record.peptide, record.allele) in source_pairs,
-                "binder_split": assign_split(record.peptide),
+                "binding_dataset_overlap": overlap,
+                "binder_split": split,
                 "prediction": positive_result,
                 "matched_negative": {
                     "peptide": decoy,
@@ -241,34 +321,17 @@ def evaluate_literature_panel(
             }
         )
 
-    visible = {Verdict.VISIBLE_CLEAR, Verdict.VISIBLE_FAINT}
-    positive_visible = sum(verdict in visible for verdict in positive_verdicts)
-    decoy_rejected = sum(verdict is Verdict.INVISIBLE for verdict in decoy_verdicts)
-    evaluable_count = len(positive_verdicts)
-    labels = [True] * evaluable_count + [False] * evaluable_count
-    rank_scores = [-rank for rank in positive_ranks + decoy_ranks]
-    agreement_stats: dict[str, object] = {
-        "published_positive_total": len(panel),
-        "published_positive_evaluable": evaluable_count,
-        "published_positive_not_evaluable": len(panel) - evaluable_count,
-        "positive_visible_count": positive_visible,
-        "positive_invisible_count": evaluable_count - positive_visible,
-        "positive_agreement_rate": _rate(positive_visible, evaluable_count),
-        "positive_verdict_counts": {
-            verdict.value: positive_verdicts.count(verdict) for verdict in Verdict
-        },
-        "matched_decoy_total": len(panel),
-        "matched_decoy_evaluable": len(decoy_verdicts),
-        "matched_decoy_rejected_count": decoy_rejected,
-        "matched_decoy_rejection_rate": _rate(decoy_rejected, len(decoy_verdicts)),
-        "paired_binding_rank_wins": paired_rank_wins,
-        "paired_binding_rank_win_rate": _rate(paired_rank_wins, evaluable_count),
-        "synthetic_decoy_binding_roc_auc": (
-            round(roc_auc(labels, rank_scores), 6) if evaluable_count else None
-        ),
-        "not_evaluable_by_reason": {UNSUPPORTED_REASON: len(unsupported)},
-        "unsupported_records": unsupported,
-    }
+    agreement_stats = aggregate.summary(aggregate=True)
+    agreement_stats.update(
+        {
+            "not_evaluable_by_reason": {UNSUPPORTED_REASON: len(unsupported)},
+            "unsupported_records": unsupported,
+            "by_binding_exposure": {
+                name: accumulator.summary()
+                for name, accumulator in by_exposure.items()
+            },
+        }
+    )
     return {
         "entries": entries,
         "agreement_stats": agreement_stats,
@@ -291,7 +354,8 @@ def evaluate_literature_panel(
                 "HLA-C*08:02 is outside the frozen 26-allele HLA-A/B binder and is not evaluable.",
                 (
                     "Binding-source overlap and peptide split are disclosed per entry; this is "
-                    "not an independent clinical validation."
+                    "not an independent clinical validation. Exposure strata distinguish "
+                    "overlapping train, overlapping held-out, and source-unseen positives."
                 ),
             ],
         },

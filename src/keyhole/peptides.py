@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from keyhole.data import CANONICAL_AMINO_ACIDS
+from keyhole.contracts import canonical_sequence
 from keyhole.parse import Variant
 
 
@@ -24,11 +24,10 @@ class PeptidePair:
 
 
 def _canonical(sequence: str, label: str) -> str:
-    value = sequence.strip().upper()
-    invalid = sorted(set(value) - CANONICAL_AMINO_ACIDS)
-    if invalid:
-        raise PeptideGenerationError(f"{label} contains non-canonical residues: {''.join(invalid)}")
-    return value
+    try:
+        return canonical_sequence(sequence, label=label)
+    except (TypeError, ValueError) as error:
+        raise PeptideGenerationError(str(error)) from error
 
 
 def missense_peptides(
@@ -55,7 +54,7 @@ def missense_peptides(
     pairs: list[PeptidePair] = []
     for length in lengths:
         if length not in {9, 10}:
-            raise PeptideGenerationError("schema v1 permits only 9-mer and 10-mer candidates")
+            raise PeptideGenerationError("schema v1.1 permits only 9-mer and 10-mer candidates")
         first_start = max(0, mutation_index - length + 1)
         last_start = min(mutation_index, len(wild_type) - length)
         for start in range(first_start, last_start + 1):
@@ -98,7 +97,7 @@ def frameshift_peptides(
     pairs: list[PeptidePair] = []
     for length in lengths:
         if length not in {9, 10}:
-            raise PeptideGenerationError("schema v1 permits only 9-mer and 10-mer candidates")
+            raise PeptideGenerationError("schema v1.1 permits only 9-mer and 10-mer candidates")
         first_start = max(0, mutation_index - length + 1)
         last_start = len(altered) - length
         for start in range(first_start, last_start + 1):

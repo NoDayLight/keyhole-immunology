@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import numpy as np
 
-from keyhole.bind import AA_ORDER
+from keyhole.bind import AA_ORDER, BindingPrediction
 from keyhole.data import iter_self_peptides
 from keyhole.funnel import (
     CITATIONS,
@@ -12,9 +12,11 @@ from keyhole.funnel import (
     cleavage_score,
     foreignness_score,
     foreignness_scores,
+    run_funnel,
     tap_score,
     verdict_engine,
 )
+from keyhole.peptides import PeptidePair
 from keyhole.schema import Verdict
 
 
@@ -51,6 +53,31 @@ def test_batched_foreignness_is_exactly_scalar_equivalent() -> None:
     expected = tuple(foreignness_score(peptide, self_index=self_rows) for peptide in peptides)
     assert foreignness_scores(peptides, self_index=self_rows) == expected
     assert foreignness_scores((), self_index=self_rows) == ()
+
+
+def test_run_funnel_uses_injected_science_and_shared_tie_break() -> None:
+    pair = PeptidePair("GILGFVFTL", "GILGFVFTV", 8, 0, "missense")
+
+    class TieBinder:
+        def predict(self, peptide: str, allele: str) -> BindingPrediction:
+            return BindingPrediction(
+                allele,
+                peptide,
+                100.0 if peptide == pair.seq else 200.0,
+                1.0,
+            )
+
+    foreignness_calls: list[str] = []
+    result = run_funnel(
+        pair,
+        ("B*07:02", "A*02:01"),
+        binder=TieBinder(),  # type: ignore[arg-type]
+        foreignness_fn=lambda peptide: foreignness_calls.append(peptide) or 0.5,
+    )
+    assert result.best_allele == "A*02:01"
+    assert result.agretopicity == 2.0
+    assert result.foreignness == 0.5
+    assert foreignness_calls == [pair.seq]
 
 
 def test_verdict_engine_covers_all_verdicts_and_required_language() -> None:

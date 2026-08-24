@@ -94,6 +94,8 @@ def test_frozen_artifacts_cover_all_26_alleles_and_are_safe_arrays() -> None:
     assert "10.1073/pnas.89.22.10915" in card["blosum62"]["citation"]
     assert "10.1093/nar/gky1006" in card["dataset"]["citation"]
     assert "censor-bound" in card["censoring"]["approximation"]
+    assert "unused for training" in card["split"]["validation_usage"]
+    assert "reported test metrics" in card["split"]["validation_usage"]
 
 
 def test_inference_is_byte_and_value_deterministic() -> None:

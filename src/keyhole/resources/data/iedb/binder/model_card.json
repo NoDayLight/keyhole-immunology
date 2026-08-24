@@ -99,7 +99,8 @@
       "train": 0.8,
       "validation": 0.1
     },
-    "scope": "global peptide identity before allele grouping"
+    "scope": "global peptide identity before allele grouping",
+    "validation_usage": "Reserved by deterministic assignment but unused for training, model selection, early stopping, hyperparameter tuning, calibration, or reported test metrics."
   },
   "training": {
     "deterministic_algorithms": true,
