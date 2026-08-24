@@ -174,11 +174,13 @@ NARRATIVE = (
 )
 
 #: The narrative spine. Section indices exist only here and in the rail, never repeated
-#: as a decorative kicker above each heading.
+#: as a decorative kicker above each heading. The second field is the short rail
+#: station label, kept brief so a navigation label never wraps; the third is the
+#: section heading, which carries the full question.
 SECTIONS: tuple[tuple[str, str, str, str], ...] = (
     (
         "funnel",
-        "Visibility funnel",
+        "Funnel",
         "Watch every candidate pass the inspection gates",
         "One particle is one real serialized candidate. Gate outcomes and rejection "
         "colours come only from the reason codes already computed in Python, so the "
@@ -186,7 +188,7 @@ SECTIONS: tuple[tuple[str, str, str, str], ...] = (
     ),
     (
         "atlas",
-        "Population coverage",
+        "Coverage",
         "Who else carries a compatible keyhole?",
         "Coverage is limited to the observed AFR, AMR, EAS, and EUR marginals in the "
         "frozen panel and to the 26-allele model set. Geography is presentation only, "
@@ -195,7 +197,7 @@ SECTIONS: tuple[tuple[str, str, str, str], ...] = (
     ),
     (
         "structures",
-        "Molecular keyhole",
+        "Structures",
         "Look through the keyhole at measured coordinates",
         "Experimental scenes draw untouched packaged PDB coordinates. Candidate scenes "
         "keep the measured 1HHK backbone visibly separate from illustrative side-chain "
@@ -211,7 +213,7 @@ SECTIONS: tuple[tuple[str, str, str, str], ...] = (
     ),
     (
         "methods",
-        "Methods and limits",
+        "Methods",
         "Every method label, source, and refusal",
         "Each number in this report carries the label of the method that produced it. "
         "This section lists those labels, the frozen sources behind them, and the "
@@ -221,23 +223,25 @@ SECTIONS: tuple[tuple[str, str, str, str], ...] = (
 
 
 def _rail() -> str:
-    """Render the single numbered narrative spine."""
+    """Render the narrative spine: one ordered station list, numbered exactly once.
 
-    items = [
-        '<li><a href="#overview"><span class="n">00</span><span>Overview</span></a></li>'
-    ]
-    items.extend(
+    The report is a linear argument, so its navigation is a progress spine rather than a
+    panel of links. It carries no logo and no provenance metadata: the masthead already
+    identifies the report and the footer already states schema, seed, and offline status.
+    """
+
+    stations = [("overview", "Overview")]
+    stations.extend((anchor, name) for anchor, name, _title, _caveat in SECTIONS)
+    items = "".join(
         f'<li><a href="#{anchor}"><span class="n">{index:02d}</span>'
-        f"<span>{escape(name)}</span></a></li>"
-        for index, (anchor, name, _title, _caveat) in enumerate(SECTIONS, start=1)
+        f'<span class="t">{escape(name)}</span></a></li>'
+        for index, (anchor, name) in enumerate(stations)
     )
     return (
-        '<aside class="rail"><p class="rail-mark">Keyhole</p>'
-        '<nav aria-label="Report sections"><ul class="rail-nav">'
-        + "".join(items)
-        + "</ul></nav>"
-        f'<p class="rail-foot">schema v{SCHEMA_VERSION}<br>seed {PROJECT_SEED}<br>'
-        "offline single file</p></aside>"
+        '<aside class="rail"><nav class="rail-nav" aria-label="Report sections">'
+        '<span class="rail-spine" aria-hidden="true"><i class="rail-spine-fill"></i></span>'
+        f'<ol class="rail-list">{items}</ol>'
+        "</nav></aside>"
     )
 
 

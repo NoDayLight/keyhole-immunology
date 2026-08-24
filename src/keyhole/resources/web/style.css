@@ -127,38 +127,61 @@ p { margin: 0 0 0.85rem; }
 .flow { min-width: 0; }
 .wrap { width: min(1180px, 100%); margin-inline: auto; padding-inline: var(--gutter); }
 
-/* -------------------------------------------------------- narrative rail */
-/* The report is numbered exactly once, here. No section repeats its own index. */
+/* -------------------------------------------------------- narrative spine */
+/*
+ * The report is one linear argument, so its navigation is a progress spine, not a panel.
+ * It is built from the same hairline the rest of the document uses, it carries no
+ * background or border of its own, and the line fills to the station you are reading.
+ * The 100vh box exists only so `sticky` has something to travel over; the stations are
+ * centred inside it, so there is no empty panel to look at.
+ */
 .rail {
-  position: sticky; top: 0; align-self: start;
-  height: 100vh; display: flex; flex-direction: column;
-  border-right: 1px solid var(--hair);
-  padding: 1.5rem 0 1.25rem;
-  background: var(--bg);
-  z-index: 30;
+  position: sticky; top: 0; align-self: start; z-index: 30;
+  height: 100vh; display: flex; align-items: center;
+  padding-left: var(--gutter); padding-right: 1rem;
 }
-.rail-mark {
-  font: 500 11px/1 var(--mono); letter-spacing: 0.2em; text-transform: uppercase;
-  color: var(--ink); padding: 0 1.25rem 1.25rem; display: flex; gap: 0.5rem; align-items: center;
+.rail-nav { position: relative; width: 100%; }
+.rail-spine {
+  position: absolute; left: 6.5px; top: 17px; bottom: 17px; width: 1px;
+  background: var(--hair);
 }
-.rail-mark::before {
-  content: ""; width: 9px; height: 9px; border-radius: 50%;
-  border: 2px solid var(--accent); flex: none;
+.rail-spine-fill {
+  position: absolute; left: 0; top: 0; width: 1px;
+  height: var(--rail-progress, 0%); background: var(--accent);
+  transition: height 0.45s cubic-bezier(0.32, 0.72, 0, 1);
 }
-.rail-nav { list-style: none; margin: 0; padding: 0 0.75rem; display: flex; flex-direction: column; gap: 1px; }
-.rail-nav a {
-  display: grid; grid-template-columns: 2.1rem 1fr; align-items: baseline;
-  gap: 0.35rem; padding: 0.5rem 0.5rem; border-radius: 6px;
-  color: var(--ink-2); border: 0; font-size: 0.86rem; line-height: 1.3;
+.rail-list { list-style: none; margin: 0; padding: 0; }
+.rail-list a {
+  position: relative; display: grid; grid-template-columns: 14px 2.15rem 1fr;
+  align-items: center; gap: 0.5rem; min-height: 34px; padding: 0.5rem 0;
+  border: 0; color: var(--ink-3); font-size: 0.83rem; line-height: 1.3;
+  transition: color 0.2s ease;
 }
-.rail-nav a:hover { background: var(--panel); color: var(--ink); }
-.rail-nav .n { font: 500 10.5px/1.5 var(--mono); color: var(--ink-3); letter-spacing: 0.06em; }
-.rail-nav a[aria-current="true"] { background: var(--accent-sunk); color: var(--ink); }
-.rail-nav a[aria-current="true"] .n { color: var(--accent); }
-.rail-foot {
-  margin-top: auto; padding: 1rem 1.25rem 0; border-top: 1px solid var(--hair);
-  font: 400 10.5px/1.55 var(--mono); color: var(--ink-3); letter-spacing: 0.01em;
+/* The station marker sits on the spine. */
+.rail-list a::before {
+  content: ""; grid-column: 1; width: 8px; height: 8px; border-radius: 50%;
+  background: var(--bg); box-shadow: inset 0 0 0 1px var(--hair-strong);
+  transition: background-color 0.25s ease, box-shadow 0.25s ease;
 }
+/* Station numbers use the same index idiom as a figure label, tying rail to figures. */
+.rail-list .n {
+  font: 500 10px/1 var(--mono); letter-spacing: 0.1em; color: var(--ink-3);
+  transition: color 0.2s ease;
+}
+/* A station label must never wrap: uneven rows would break the spine's alignment with
+   its own markers. Labels are short by design; this is the safety net. */
+.rail-list .t {
+  min-width: 0; font-size: 0.8rem;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.rail-list a:hover { color: var(--ink-2); }
+.rail-list a:hover::before { box-shadow: inset 0 0 0 1px var(--ink-3); }
+.rail-list a[aria-current="true"] { color: var(--ink); }
+.rail-list a[aria-current="true"] .n { color: var(--accent); }
+.rail-list a[aria-current="true"]::before {
+  background: var(--accent); box-shadow: 0 0 0 3px var(--accent-sunk);
+}
+.rail-list a:focus-visible { outline-offset: 4px; }
 
 /* --------------------------------------------------------------- masthead */
 .masthead { padding: clamp(2.5rem, 5vw, 4.5rem) 0 0; }
@@ -742,16 +765,24 @@ noscript { display: block; border: 1px solid var(--faint); border-radius: 8px; p
 /* ------------------------------------------------------------- responsive */
 @media (max-width: 1180px) {
   .shell { grid-template-columns: minmax(0, 1fr); }
+  /* The spine turns on its side: a horizontal hairline with the same station markers. */
   .rail {
-    position: sticky; top: 0; height: auto; flex-direction: row; align-items: center;
-    gap: 0.5rem; border-right: 0; border-bottom: 1px solid var(--hair);
-    padding: 0.55rem var(--gutter); overflow-x: auto;
+    position: sticky; top: 0; height: auto; align-items: stretch;
+    border-bottom: 1px solid var(--hair);
+    padding: 0 var(--gutter); overflow-x: auto; overflow-y: hidden;
     background: rgba(8, 9, 10, 0.92); backdrop-filter: blur(12px);
   }
-  .rail-mark { padding: 0 0.75rem 0 0; flex: none; }
-  .rail-nav { flex-direction: row; padding: 0; gap: 0.15rem; }
-  .rail-nav a { grid-template-columns: auto auto; white-space: nowrap; padding: 0.4rem 0.6rem; }
-  .rail-foot { display: none; }
+  .rail-spine { display: none; }
+  .rail-list { display: flex; gap: 0.2rem; }
+  .rail-list li { flex: none; }
+  .rail-list a {
+    grid-template-columns: auto auto; gap: 0.4rem; white-space: nowrap;
+    padding: 0.6rem 0.55rem; min-height: 0;
+  }
+  /* In a scrolling bar the labels have room, so drop the desktop ellipsis clamp. */
+  .rail-list .t { overflow: visible; text-overflow: clip; }
+  .rail-list a::before { display: none; }
+  .rail-list a[aria-current="true"] { box-shadow: inset 0 -2px 0 var(--accent); }
   /* The rail becomes a sticky top bar here, so anchor jumps must clear it. */
   .panel, .masthead { scroll-margin-top: 4.25rem; }
 }

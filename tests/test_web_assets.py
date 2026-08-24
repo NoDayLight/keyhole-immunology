@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import re
+from pathlib import Path
 
 from keyhole.report import web_root
 
@@ -567,6 +568,50 @@ def test_select_menu_opens_below_and_keeps_the_native_select_authoritative() -> 
     assert "!wrap.contains(event.target)" in figure
     assert 'select.classList.remove("menu-native")' in figure
     assert "if (menuController) { menuController.destroy(); menuController = null; }" in atlas
+
+
+def test_narrative_spine_is_hairline_structure_not_a_panel() -> None:
+    """The rail must use the document's own hairline language and show reading position."""
+
+    css = (WEB / "style.css").read_text(encoding="utf-8")
+    main = (WEB / "main.js").read_text(encoding="utf-8")
+    rail = css.split("\n.rail {", maxsplit=1)[1].split("}", maxsplit=1)[0]
+
+    # No panel: the rail owns no background and no border of its own.
+    assert "background" not in rail
+    assert "border" not in rail
+    # The 100vh box exists only for sticky travel; the stations are centred inside it, so
+    # there is no empty panel between the last station and the bottom of the viewport.
+    assert "height: 100vh;" in rail and "align-items: center;" in rail
+
+    # A hairline spine with a marker per station, drawn from the shared tokens.
+    assert ".rail-spine {" in css and "background: var(--hair);" in css
+    assert ".rail-spine-fill {" in css
+    assert "height: var(--rail-progress, 0%);" in css
+    assert "background: var(--accent);" in css
+    assert ".rail-list a::before {" in css
+    assert "border-radius: 50%;" in css
+
+    # The spine is inset by half a row at each end so it starts and ends on a marker,
+    # which only holds while every row is the same height.
+    assert "top: 17px; bottom: 17px;" in css
+    assert "min-height: 34px;" in css
+    assert "white-space: nowrap; overflow: hidden; text-overflow: ellipsis;" in css
+
+    # Reading position is published as a percentage, not just an active link.
+    assert 'nav.style.setProperty(' in main
+    assert '"--rail-progress"' in main
+    assert "(reached * 100 / (links.length - 1))" in main
+
+    # The provenance metadata and the second logo are gone: the footer and the masthead
+    # already carry them, and they were what forced the empty panel.
+    assert "rail-foot" not in css and "rail-mark" not in css
+    report = (Path(__file__).resolve().parents[1] / "src/keyhole/report.py").read_text(
+        encoding="utf-8"
+    )
+    assert "rail-foot" not in report and "rail-mark" not in report
+    assert 'class="rail-spine"' in report
+    assert "<ol class=\"rail-list\">" in report
 
 
 def test_stylesheet_declares_one_accent_three_type_roles_and_motion_rules() -> None:

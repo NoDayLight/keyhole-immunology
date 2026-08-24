@@ -249,7 +249,8 @@
 
   /* ------------------------------------------------------------------ rail */
   function activeRail() {
-    var links = Array.prototype.slice.call(document.querySelectorAll(".rail-nav a"));
+    var nav = document.querySelector(".rail-nav");
+    var links = Array.prototype.slice.call(document.querySelectorAll(".rail-list a"));
     if (!links.length || !global.IntersectionObserver) { return { destroy: function () {} }; }
     var targets = links.map(function (link) {
       return document.querySelector(link.getAttribute("href"));
@@ -266,6 +267,14 @@
         if (index === best) { link.setAttribute("aria-current", "true"); }
         else { link.removeAttribute("aria-current"); }
       });
+      /* Fill the spine up to the station being read, so the rail shows position in the
+         argument rather than only which link is active. */
+      if (nav && links.length > 1) {
+        var reached = best < 0 ? 0 : best;
+        nav.style.setProperty(
+          "--rail-progress", (reached * 100 / (links.length - 1)).toFixed(2) + "%"
+        );
+      }
     }
     var observer = new global.IntersectionObserver(function (entries) {
       entries.forEach(function (entry) { ratios.set(entry.target, entry.intersectionRatio); });
