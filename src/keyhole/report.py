@@ -15,23 +15,30 @@ from keyhole.contracts import PROJECT_SEED, SCHEMA_VERSION
 from keyhole.data import pdb_path
 from keyhole.schema import validate_results
 from keyhole.structure import schematic_peptide_scene, structure_payload, summarize_pdb
+from keyhole.vendor import vendored_runtime
 
 SCRIPT_ORDER = (
+    "figure.js",
     "projection.js",
     "pdb.js",
     "scene.js",
+    "molecule3d.js",
+    "globe.js",
+    "charts.js",
     "funnel.js",
     "atlas.js",
     "theater.js",
     "main.js",
 )
+STYLESHEET = "style.css"
 
 
 def web_root() -> Path:
     """Resolve wheel-installed browser assets without a network or build step."""
 
     candidate = packaged_directory("web")
-    if not all((candidate / name).is_file() for name in SCRIPT_ORDER):
+    required = (*SCRIPT_ORDER, STYLESHEET)
+    if not all((candidate / name).is_file() for name in required):
         raise FileNotFoundError("KEYHOLE browser assets are incomplete")
     return candidate
 
@@ -159,9 +166,156 @@ def assemble_report_scenes(results: Mapping[str, object]) -> dict[str, object]:
     return {"schematics": schematics, "structures": structures}
 
 
-_STYLE = r"""
-:root{color-scheme:dark;--ink:#eaf2f7;--muted:#aebdca;--panel:#101e2b;--line:#294052;--teal:#50bfca;--gold:#f3bf4d;--red:#ec6b76;--green:#67cf9a;font-family:Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}*{box-sizing:border-box}html{scroll-behavior:smooth}body{margin:0;background:#07111b;color:var(--ink);line-height:1.55}a{color:#8cdce2}header,main,footer{width:min(1180px,calc(100% - 2rem));margin:auto}header{padding:3rem 0 2rem}.eyebrow,.method{font-size:.76rem;letter-spacing:.08em;text-transform:uppercase;color:var(--teal);font-weight:750}h1{font-size:clamp(2.6rem,7vw,5.4rem);line-height:.92;margin:.4rem 0 1rem;letter-spacing:-.05em}.lede{font-size:clamp(1.05rem,2.2vw,1.4rem);max-width:900px;color:#d7e4ec}.notice{border-left:4px solid var(--gold);background:#1b2430;padding:1rem 1.2rem;border-radius:.35rem;margin:1rem 0}.audit{display:grid;grid-template-columns:repeat(auto-fit,minmax(145px,1fr));gap:.75rem}.stat,.card,section.panel{background:linear-gradient(145deg,#122332,#0d1a27);border:1px solid var(--line);border-radius:1rem;padding:1rem}.stat strong{display:block;font-size:1.8rem;color:var(--gold)}nav{position:sticky;top:0;z-index:20;background:#07111bef;backdrop-filter:blur(12px);border-block:1px solid var(--line)}nav ul{width:min(1180px,calc(100% - 2rem));margin:auto;padding:.7rem 0;display:flex;gap:1rem;list-style:none;overflow:auto}nav a{text-decoration:none;white-space:nowrap}main{display:grid;gap:1.25rem;padding:1.5rem 0 4rem}section.panel{scroll-margin-top:4rem}h2{font-size:clamp(1.5rem,3vw,2.3rem);margin:.1rem 0 .5rem}h3{margin-top:1.2rem}.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,300px),1fr));gap:1rem}.badge,.scene-truth{display:inline-block;border:1px solid currentColor;border-radius:999px;padding:.25rem .58rem;font-size:.75rem;font-weight:750}.visible-clear{color:var(--green)}.visible-faint{color:var(--gold)}.invisible{color:var(--red)}button,select{background:#152b3c;color:var(--ink);border:1px solid #416078;border-radius:.45rem;padding:.55rem .7rem;font:inherit}button:focus-visible,select:focus-visible,[tabindex]:focus-visible,summary:focus-visible{outline:3px solid var(--gold);outline-offset:3px}.sequence{font:700 1.05rem ui-monospace,SFMono-Regular,Menlo,monospace;letter-spacing:.08em}.mutation-residue{color:#fff;background:#c72f45;border-radius:.18rem;padding:.05rem .18rem}.flow-svg,.atlas-svg,.keyhole-scene-svg{width:100%;height:auto;min-height:180px;border-radius:.7rem;background:#08131e}.table-wrap{overflow:auto}table{width:100%;border-collapse:collapse;font-size:.86rem}th,td{text-align:left;border-bottom:1px solid var(--line);padding:.48rem;vertical-align:top}th{color:#a9dce1}.score-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:.55rem}.score-grid div{background:#0a1722;padding:.55rem;border-radius:.5rem}.keyhole-scene{margin-top:1rem}.keyhole-scene-canvas{display:block;max-width:100%;border-radius:.75rem;margin:.7rem 0}.scene-detail,.caveat,.scene-status{color:var(--muted);font-size:.9rem}.scene-controls{display:flex;flex-wrap:wrap;align-items:center;gap:.7rem}.scene-fallback{margin:.7rem 0}.scene-chain-legend{columns:2;padding-left:1.2rem}.matrix-cell.yes{color:var(--green)}.matrix-cell.no{color:#718496}.literature-card{border-top:3px solid var(--teal)}.limitations{color:var(--muted)}details{border:1px solid var(--line);border-radius:.65rem;padding:.65rem;margin:.6rem 0}summary{cursor:pointer;font-weight:700}footer{padding:2rem 0 4rem;color:var(--muted)}noscript{display:block;background:#3b1e25;padding:1rem}.fatal{border:2px solid var(--red);padding:1rem}.screen-reader{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0,0,0,0)}@media(max-width:650px){.scene-chain-legend{columns:1}.audit{grid-template-columns:repeat(2,1fr)}}@media print{body{background:#fff;color:#111}nav,button,.keyhole-scene-canvas{display:none!important}.card,section.panel{background:#fff;border-color:#bbb}.scene-fallback{display:block}.scene-fallback>div{display:block}.scene-truth{color:#111}}
-"""
+NARRATIVE = (
+    "Every cell displays fragments of its own proteins like ID cards for immune "
+    "inspection; cancer corrupts some of those cards. KEYHOLE reads a real tumour file, "
+    "scores every mutation-derived card it can defend, and shows which ones this set of "
+    "HLA keyholes could actually display."
+)
+
+#: The narrative spine. Section indices exist only here and in the rail, never repeated
+#: as a decorative kicker above each heading.
+SECTIONS: tuple[tuple[str, str, str, str], ...] = (
+    (
+        "funnel",
+        "Visibility funnel",
+        "Watch every candidate pass the inspection gates",
+        "One particle is one real serialized candidate. Gate outcomes and rejection "
+        "colours come only from the reason codes already computed in Python, so the "
+        "animation can explain a rejection but can never decide one.",
+    ),
+    (
+        "atlas",
+        "Population coverage",
+        "Who else carries a compatible keyhole?",
+        "Coverage is limited to the observed AFR, AMR, EAS, and EUR marginals in the "
+        "frozen panel and to the 26-allele model set. Geography is presentation only, "
+        "and ALL_OBSERVED is a cohort-weighted aggregate rather than a worldwide "
+        "estimate.",
+    ),
+    (
+        "structures",
+        "Molecular keyhole",
+        "Look through the keyhole at measured coordinates",
+        "Experimental scenes draw untouched packaged PDB coordinates. Candidate scenes "
+        "keep the measured 1HHK backbone visibly separate from illustrative side-chain "
+        "geometry.",
+    ),
+    (
+        "literature",
+        "Reality check",
+        "Does this agree with published T-cell results?",
+        "Published T-cell positivity and KEYHOLE visibility are different endpoints. "
+        "Composition-preserving shuffled controls are synthetic decoys, never assayed "
+        "negatives, specificity, or clinical validation.",
+    ),
+    (
+        "methods",
+        "Methods and limits",
+        "Every method label, source, and refusal",
+        "Each number in this report carries the label of the method that produced it. "
+        "This section lists those labels, the frozen sources behind them, and the "
+        "claims KEYHOLE explicitly does not make.",
+    ),
+)
+
+
+def _rail() -> str:
+    """Render the single numbered narrative spine."""
+
+    items = [
+        '<li><a href="#overview"><span class="n">00</span><span>Overview</span></a></li>'
+    ]
+    items.extend(
+        f'<li><a href="#{anchor}"><span class="n">{index:02d}</span>'
+        f"<span>{escape(name)}</span></a></li>"
+        for index, (anchor, name, _title, _caveat) in enumerate(SECTIONS, start=1)
+    )
+    return (
+        '<aside class="rail"><p class="rail-mark">Keyhole</p>'
+        '<nav aria-label="Report sections"><ul class="rail-nav">'
+        + "".join(items)
+        + "</ul></nav>"
+        f'<p class="rail-foot">schema v{SCHEMA_VERSION}<br>seed {PROJECT_SEED}<br>'
+        "offline single file</p></aside>"
+    )
+
+
+def _sections() -> str:
+    """Render each section shell with exactly one heading and one standing caveat."""
+
+    return "".join(
+        f'<section id="{anchor}" class="panel"><div class="wrap">'
+        f'<header class="sec-head"><h2>{escape(title)}</h2>'
+        f'<p class="caveat">{escape(caveat)}</p></header>'
+        f'<div id="{anchor}-app"></div></div></section>'
+        for anchor, _name, title, caveat in SECTIONS
+    )
+
+
+def _command_line(tumor: Mapping[str, object], allele_list: str) -> str:
+    """Render the exact reproducing command with flags highlighted."""
+
+    parts = [
+        '<span class="prompt">$ </span>keyhole screen ',
+        '<span class="flag">--maf</span> ',
+        escape(str(tumor["input"])),
+        ' <span class="flag">--hla</span> ',
+        escape(f"\'{allele_list}\'"),
+        ' <span class="flag">--report</span> report.html',
+    ]
+    return "".join(parts)
+
+
+def _verdict_strip(counts: Mapping[str, int], total: int) -> str:
+    cells = (
+        ("VISIBLE_CLEAR", "visible-clear", "predicted visible, clearly", "clear"),
+        ("VISIBLE_FAINT", "visible-faint", "predicted visible, faintly", "faint"),
+        ("INVISIBLE", "invisible", "predicted not displayed", "invisible"),
+    )
+    share = total if total else 1
+    return '<div class="verdict-strip">' + "".join(
+        f'<div class="verdict-cell {css}"><strong>{counts[key]}</strong>'
+        f"<span>{label}</span>"
+        f'<em>{counts[key] * 100 // share}% of {total}</em></div>'
+        for key, css, label, _short in cells
+    ) + "</div>"
+
+
+def _ledger(screening: Mapping[str, object], candidate_count: int) -> str:
+    """Render the audit ladder from raw input rows down to scored candidates."""
+
+    steps = (
+        (
+            int(screening["input_row_count"]),
+            "rows read from the tumour file",
+            f"{int(screening['ignored_class_count'])} ignored as silent or "
+            "non-protein-changing classes",
+        ),
+        (
+            int(screening["supported_change_count"]),
+            "protein-changing mutations recognised",
+            f"{int(screening['missing_canonical_context_count'])} dropped for having no "
+            "frozen canonical protein context · "
+            f"{int(screening['unsupported_frameshift_count'])} frameshifts disclosed "
+            "rather than fabricated",
+        ),
+        (
+            int(screening["screenable_variant_count"]),
+            "variants carried into the funnel",
+            "missense changes with a real reference protein sequence",
+        ),
+        (
+            candidate_count,
+            "candidate cards generated and fully scored",
+            "every figure below is computed from exactly these peptides",
+        ),
+    )
+    return '<ol class="ledger">' + "".join(
+        f'<li><span class="num">{value}</span><span><b>{escape(label)}</b>'
+        f"<small>{escape(detail)}</small></span></li>"
+        for value, label, detail in steps
+    ) + "</ol>"
 
 
 def _render_report(
@@ -172,6 +326,8 @@ def _render_report(
     results = dict(document) if schema_validated else validate_results(dict(document))
     scenes = assemble_report_scenes(results)
     root = web_root()
+    runtime = vendored_runtime()
+    stylesheet = (root / STYLESHEET).read_text(encoding="utf-8")
     scripts = "\n".join(
         f"/* inline:{name} */\n{(root / name).read_text(encoding='utf-8')}"
         for name in SCRIPT_ORDER
@@ -180,36 +336,65 @@ def _render_report(
     assert isinstance(tumor, dict)
     screening = tumor["screening"]
     assert isinstance(screening, dict)
-    mutation_count = len(results["mutations"])
-    candidate_count = sum(len(item["peptides"]) for item in results["mutations"])
-    audit_items = "".join(
-        f'<div class="stat"><strong>{int(value)}</strong>{escape(key.replace("_", " "))}</div>'
-        for key, value in sorted(screening.items())
-    )
-    narrative = (
-        "Every cell displays fragments of its own proteins like ID cards for immune inspection; "
-        "cancer corrupts some of those cards; KEYHOLE reads a real tumor's corrupted cards and "
-        "reports—in plain language, real 3D molecular structures, and population-wide "
-        "coverage—which ones the immune system can actually see."
-    )
+    mutations = results["mutations"]
+    assert isinstance(mutations, list)
+    mutation_count = len(mutations)
+    candidate_count = sum(len(item["peptides"]) for item in mutations)
+    verdict_counts: dict[str, int] = {
+        "VISIBLE_CLEAR": 0,
+        "VISIBLE_FAINT": 0,
+        "INVISIBLE": 0,
+    }
+    for mutation in mutations:
+        assert isinstance(mutation, dict)
+        for peptide in mutation["peptides"]:
+            assert isinstance(peptide, dict)
+            verdict_counts[str(peptide["verdict"])] += 1
+    alleles = results["alleles"]
+    assert isinstance(alleles, list)
+    allele_list = ",".join(str(allele) for allele in alleles)
+    meta = results["meta"]
+    assert isinstance(meta, dict)
+
     return f"""<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src data:; connect-src 'none'; font-src 'none'; object-src 'none'; base-uri 'none'">
-<title>KEYHOLE — {escape(str(tumor['name']))}</title><style>{_STYLE}</style></head>
-<body><header><p class="eyebrow">Cancer immunology, made inspectable</p><h1>PROJECT<br>KEYHOLE</h1><p class="lede">{escape(narrative)}</p>
-<div class="notice"><strong>Truth boundary:</strong> binding is measured-data ML. Processing, foreignness, verdicts, and unphased population coverage are transparent heuristic approximations—not clinical recommendations.</div>
-<div class="audit">{audit_items}<div class="stat"><strong>{mutation_count}</strong>reported mutations</div><div class="stat"><strong>{candidate_count}</strong>candidate cards</div></div></header>
-<nav aria-label="Report sections"><ul><li><a href="#funnel">Visibility funnel</a></li><li><a href="#atlas">Population atlas</a></li><li><a href="#structures">Molecular keyhole</a></li><li><a href="#literature">Published panel</a></li><li><a href="#methods">Methods</a></li></ul></nav>
-<main id="report"><section id="funnel" class="panel"><h2>Which corrupted cards get displayed?</h2><p class="caveat">Select a real mutation-derived peptide. Every stage below is rendered from validated results.json values.</p><div id="funnel-app"></div></section>
-<section id="atlas" class="panel"><h2>Who carries a compatible keyhole?</h2><p class="caveat">Coverage is limited to AFR/AMR/EAS/EUR observed marginals and the frozen 26-allele model panel. ALL_OBSERVED is not a worldwide estimate.</p><div id="atlas-app"></div></section>
-<section id="structures" class="panel"><h2>Look through the molecular keyhole</h2><p class="caveat">Real scenes use untouched experimental PDB coordinates. Candidate geometry is visibly separated as illustrative.</p><div id="structure-app" class="grid"></div></section>
-<section id="literature" class="panel"><h2>Published-positive agreement panel</h2><p class="caveat">Published T-cell positivity and KEYHOLE visibility are different endpoints; synthetic controls are not assayed negatives.</p><div id="theater-app"></div></section>
-<section id="methods" class="panel"><h2>Methods, citations, and limits</h2><div id="methods-app"></div></section>
-<noscript><strong>JavaScript is disabled.</strong> This offline file still contains {mutation_count} mutations and {candidate_count} validated candidates, all three PDB coordinate files, and complete citations; local JavaScript is required only for interactive rendering.</noscript></main>
-<footer>KEYHOLE schema v{SCHEMA_VERSION} · deterministic seed {PROJECT_SEED} · generated {escape(str(results['meta']['created_utc']))} · offline after creation</footer>
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src data:; font-src data:; connect-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'">
+<meta name="color-scheme" content="dark">
+<meta name="robots" content="noindex">
+<title>KEYHOLE — {escape(str(tumor['name']))}</title>
+<style>{runtime.font_face_css}
+{stylesheet}</style></head>
+<body><a class="skip" href="#report">Skip to the report</a>
+<div class="shell">{_rail()}
+<div class="flow">
+<header class="masthead" id="overview"><div class="wrap">
+<div class="masthead-grid">
+<div>
+<p class="eyebrow">Tumour visibility report · {escape(str(tumor['name']))} · {escape(allele_list)}</p>
+<h1>Which corrupted cards can this immune system actually see?</h1>
+<p class="lede">{escape(NARRATIVE)}</p>
+{_verdict_strip(verdict_counts, candidate_count)}
+<div class="boundary"><strong>Truth boundary.</strong> Peptide–HLA binding is a measured-data machine-learning prediction. Antigen processing, foreignness, verdicts, and unphased population coverage are transparent heuristic approximations. Nothing here is a diagnosis, a treatment recommendation, or evidence of immunogenicity.</div>
+<div class="boundary"><strong>Demonstration input.</strong> The HLA alleles above were supplied on the command line to exercise the models. They are not a patient genotype, not a clinical HLA typing result, and not linked to any individual.</div>
+</div>
+<div id="hero-app"></div>
+</div>
+<div class="provenance">
+<div><p class="kicker">This file was computed, not authored</p>
+<div class="command"><code>{_command_line(tumor, allele_list)}</code></div>
+<p class="fig-status">Seed {PROJECT_SEED} · schema v{SCHEMA_VERSION} · set SOURCE_DATE_EPOCH to reproduce these bytes exactly.</p></div>
+<div><p class="kicker">Audit trail from input rows to scored cards</p>{_ledger(screening, candidate_count)}</div>
+</div>
+</div></header>
+<main id="report">{_sections()}</main>
+<noscript><div class="wrap"><strong>JavaScript is disabled.</strong> This offline file still contains {mutation_count} reported mutations, {candidate_count} validated candidates, all three packaged PDB coordinate sets, the complete population and literature evidence, and every citation. Local JavaScript is required only to draw the interactive figures.</div></noscript>
+<footer><div class="wrap">KEYHOLE schema v{SCHEMA_VERSION} · deterministic seed {PROJECT_SEED} · generated {escape(str(meta['created_utc']))} · one offline file, no network access after creation</div></footer>
+</div></div>
 <script type="application/json" id="keyhole-results">{_json_text(results)}</script>
-<script type="application/json" id="keyhole-scenes">{_json_text(scenes)}</script>
+<script type="application/json" id="keyhole-scenes">{_json_text(scenes)}</script>{runtime.banner}<script>{runtime.classic_prelude}</script>
+<script type="module">{runtime.three_module}</script>
 <script>{scripts}</script></body></html>"""
+
 
 
 def render_report(document: Mapping[str, object]) -> str:

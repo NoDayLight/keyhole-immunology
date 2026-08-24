@@ -386,7 +386,16 @@
       var size = dimensions();
       var sizeKey = size.width + "x" + size.height;
       if (!force && !svgDirty && svgSizeKey === sizeKey) { return; }
-      svgHost.innerHTML = renderSvg(prepared, view, size.width, size.height, label);
+      /* The fallback markup is fully escaped at construction, and it is adopted through
+         an XML parse rather than assigned as HTML, so no string can ever become live
+         markup or an event handler in this document. */
+      svgHost.replaceChildren();
+      var markup = renderSvg(prepared, view, size.width, size.height, label);
+      var parsed = new global.DOMParser().parseFromString(markup, "image/svg+xml");
+      var root = parsed.documentElement;
+      if (root && root.nodeName !== "parsererror") {
+        svgHost.appendChild(document.importNode(root, true));
+      }
       svgSizeKey = sizeKey;
       svgDirty = false;
     }

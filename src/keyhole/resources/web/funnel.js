@@ -1,7 +1,14 @@
-/* KEYHOLE mutation visibility funnel renderer; consumes serialized values only. */
+/* KEYHOLE mutation visibility funnel renderer; consumes serialized values only.
+ *
+ * Every gate outcome, colour, and count on this page is read from the reason codes and
+ * scores that Python already computed. This file never applies a scientific threshold,
+ * never invents a candidate, and never draws an unseeded random number: particle lane,
+ * delay, speed and size are all derived from the serialized seed and candidate key.
+ */
 (function (global) {
   "use strict";
 
+  var UI = null;
   var FUNNEL_TRUTH = "Schematic — data real, geometry illustrative";
   var REASON_STAGES = {
     LOW_CLEAVAGE: 0,
@@ -10,16 +17,33 @@
     SELF_LIKE: 3
   };
   var REASON_COLORS = {
-    LOW_CLEAVAGE: "#ec6b76",
-    LOW_TAP_TRANSPORT: "#f09a59",
+    LOW_CLEAVAGE: "#f85149",
+    LOW_TAP_TRANSPORT: "#e8894a",
     WEAK_BINDING: "#a984d7",
-    SELF_LIKE: "#6aa8c8"
+    SELF_LIKE: "#5fa8d3"
+  };
+  var REASON_TEXT = {
+    LOW_CLEAVAGE: "proteasome cleavage below the serialized gate",
+    LOW_TAP_TRANSPORT: "TAP transport below the serialized gate",
+    WEAK_BINDING: "no supplied allele binds strongly enough",
+    SELF_LIKE: "too similar to the sampled self peptidome"
   };
   var STAGES = [
     { name: "Proteasome gate", method: "heuristic approximation", progress: 0.16 },
     { name: "TAP channel", method: "heuristic approximation", progress: 0.40 },
     { name: "HLA keyhole", method: "measured ML", progress: 0.65 },
     { name: "Self-scan", method: "heuristic approximation", progress: 0.87 }
+  ];
+  var VERDICT_COLORS = {
+    VISIBLE_CLEAR: "#3fb950",
+    VISIBLE_FAINT: "#d29922",
+    INVISIBLE: "#8b949e"
+  };
+  var FILTERS = [
+    ["ALL", "All candidates"],
+    ["VISIBLE_CLEAR", "Visible · clear"],
+    ["VISIBLE_FAINT", "Visible · faint"],
+    ["INVISIBLE", "Invisible"]
   ];
 
   function node(tag, className, text) {
@@ -31,19 +55,109 @@
 
   function fixed(value, digits) { return Number(value).toFixed(digits); }
 
+  function countFor(candidates, verdict) {
+    if (verdict === "ALL") { return candidates.length; }
+    return candidates.filter(function (item) { return item.peptide.verdict === verdict; }).length;
+  }
+
   function sequenceNode(peptide) {
-    var wrapper = node("div", "sequence");
+    var wrapper = node("div", "seq");
     peptide.seq.split("").forEach(function (residue, index) {
-      var span = node("span", index === peptide.position ? "mutation-residue" : "", residue);
+      var span = node("span", index === peptide.position ? "seq-mut" : "seq-res", residue);
       if (index === peptide.position) { span.title = "mutated residue"; }
       wrapper.appendChild(span);
     });
     return wrapper;
   }
 
-  function flowSvg(peptide) {
+  function bestBinding(peptide) {
     var binding = peptide.scores.binding[peptide.best_allele];
     if (!binding) { throw new Error("Missing serialized best-allele binding evidence"); }
+    return binding;
+  }
+
+  function has(peptide, code) { return peptide.reason_codes.indexOf(code) !== -1; }
+
+  /*
+   * Gate ladder derived purely from serialized reason codes. "not reached" means the
+   * pipeline short-circuited earlier, so the serialized number exists but this gate
+   * never rendered a decision. No threshold is re-applied here.
+   */
+  function gateEvidence(peptide) {
+    var binding = bestBinding(peptide);
+    var bindingDecided = has(peptide, "WEAK_BINDING") || has(peptide, "STRONG_BINDING") ||
+      has(peptide, "BORDERLINE_BINDING");
+    var selfDecided = has(peptide, "SELF_LIKE") || has(peptide, "FOREIGN_LIKE") ||
+      has(peptide, "PARTLY_SELF_LIKE");
+    var differentialDecided = has(peptide, "MUTANT_BINDS_BETTER") ||
+      has(peptide, "LIMITED_DIFFERENTIAL_BINDING") || has(peptide, "NO_WT_COUNTERPART");
+    return [
+      {
+        key: "cleavage",
+        label: "Proteasome cleavage",
+        short: "Cleavage",
+        method: "heuristic approximation",
+        display: fixed(peptide.scores.cleavage, 3),
+        norm: Math.max(0, Math.min(1, Number(peptide.scores.cleavage))),
+        state: has(peptide, "LOW_CLEAVAGE") ? "stopped" : "pass",
+        note: "chance the proteasome cuts this exact C-terminus"
+      },
+      {
+        key: "tap",
+        label: "TAP transport",
+        short: "TAP",
+        method: "heuristic approximation",
+        display: fixed(peptide.scores.tap, 3),
+        norm: Math.max(0, Math.min(1, Number(peptide.scores.tap))),
+        state: has(peptide, "LOW_TAP_TRANSPORT") ? "stopped" : "pass",
+        note: "chance the fragment reaches the loading compartment"
+      },
+      {
+        key: "binding",
+        label: "HLA fit · " + peptide.best_allele,
+        short: "HLA fit",
+        method: "measured ML",
+        display: fixed(binding.rank, 2) + "% rank · " + fixed(binding.ic50, 1) + " nM",
+        axis: fixed(binding.rank, 2) + "% rank",
+        norm: Math.max(0, 1 - Math.min(1, Number(binding.rank) / 20)),
+        state: has(peptide, "WEAK_BINDING") ? "stopped" : (bindingDecided ? "pass" : "unevaluated"),
+        note: has(peptide, "STRONG_BINDING") ? "serialized as strong binding" :
+          (has(peptide, "BORDERLINE_BINDING") ? "serialized as borderline binding" :
+            (bindingDecided ? "" : "gate not reached — processing stopped first"))
+      },
+      {
+        key: "foreignness",
+        label: "Unlike sampled self",
+        short: "Foreignness",
+        method: "heuristic approximation",
+        display: fixed(peptide.foreignness, 3),
+        norm: Math.max(0, Math.min(1, Number(peptide.foreignness))),
+        state: has(peptide, "SELF_LIKE") ? "stopped" : (selfDecided ? "pass" : "unevaluated"),
+        note: selfDecided ? "distance to the closest of 500,000 sampled self 9-mers" :
+          "gate not reached — an earlier gate stopped this candidate"
+      },
+      {
+        key: "differential",
+        label: "Mutant vs wild type",
+        short: "Differential",
+        method: "heuristic approximation",
+        display: has(peptide, "NO_WT_COUNTERPART") ? "no wild-type counterpart" :
+          fixed(peptide.agretopicity, 2) + "\u00d7",
+        norm: has(peptide, "NO_WT_COUNTERPART") ? 0 :
+          Math.max(0, Math.min(1, Number(peptide.agretopicity) / 3)),
+        state: has(peptide, "NO_WT_COUNTERPART") ? "unevaluated" :
+          (differentialDecided ? "pass" : "unevaluated"),
+        note: has(peptide, "MUTANT_BINDS_BETTER") ? "serialized as mutant binding better" :
+          (has(peptide, "LIMITED_DIFFERENTIAL_BINDING") ?
+            "serialized as limited differential binding" :
+            "wild-type IC50 divided by mutant IC50, when a counterpart exists")
+      }
+    ];
+  }
+
+  /* Static serialized stage evidence, built as DOM rather than interpolated markup. */
+  function flowSvg(peptide) {
+    var binding = bestBinding(peptide);
     var stages = [
       ["Cleavage", fixed(peptide.scores.cleavage * 100, 1) + "%", "heuristic approximation"],
       ["TAP transport", fixed(peptide.scores.tap * 100, 1) + "%", "heuristic approximation"],
@@ -51,12 +165,44 @@
       ["Foreignness", fixed(peptide.foreignness, 3), "heuristic approximation"],
       ["Verdict", peptide.verdict.replaceAll("_", " "), "heuristic approximation"]
     ];
-    var body = stages.map(function (stage, index) {
+    var root = UI.svg("svg", {
+      class: "chart flow-svg",
+      viewBox: "0 0 920 150",
+      role: "img",
+      "aria-label": "Five serialized visibility stages"
+    });
+    root.appendChild(UI.svgText("title", {}, "Visibility funnel for " + peptide.seq));
+    root.appendChild(UI.svgText(
+      "desc", {},
+      "Cleavage, TAP, HLA binding, foreignness, and final verdict. Values are precomputed in Python."
+    ));
+    stages.forEach(function (stage, index) {
       var x = 10 + index * 181;
-      var arrow = index < stages.length - 1 ? '<path d="M' + (x + 164) + ' 72h17" stroke="#6e8ca2" stroke-width="3"/><path d="M' + (x + 176) + ' 66l7 6-7 6" fill="none" stroke="#6e8ca2" stroke-width="3"/>' : "";
-      return '<g><rect x="' + x + '" y="20" width="164" height="105" rx="12" fill="#102638" stroke="#35556d"/><text x="' + (x + 12) + '" y="47" fill="#eaf2f7" font-size="16" font-weight="700">' + stage[0] + '</text><text x="' + (x + 12) + '" y="74" fill="#f3bf4d" font-size="13">' + stage[1] + '</text><text x="' + (x + 12) + '" y="103" fill="#8fcbd0" font-size="10">' + stage[2] + "</text></g>" + arrow;
-    }).join("");
-    return '<svg class="flow-svg" viewBox="0 0 920 145" role="img" aria-label="Five serialized visibility stages"><title>Visibility funnel for ' + peptide.seq + "</title><desc>Cleavage, TAP, HLA binding, foreignness, and final verdict. Values are precomputed in Python.</desc>" + body + "</svg>";
+      var group = UI.svg("g", {});
+      group.appendChild(UI.svg("rect", {
+        x: x, y: 22, width: 164, height: 106, rx: 6,
+        fill: "#0d1013", stroke: "#262d34"
+      }));
+      group.appendChild(UI.svgText("text", {
+        x: x + 12, y: 48, class: "flow-name"
+      }, stage[0]));
+      group.appendChild(UI.svgText("text", {
+        x: x + 12, y: 76, class: "flow-value"
+      }, stage[1]));
+      group.appendChild(UI.svgText("text", {
+        x: x + 12, y: 104, class: "flow-method"
+      }, stage[2]));
+      root.appendChild(group);
+      if (index < stages.length - 1) {
+        root.appendChild(UI.svg("path", {
+          d: "M" + (x + 166) + " 75h13", stroke: "#3a444d", "stroke-width": 2
+        }));
+        root.appendChild(UI.svg("path", {
+          d: "M" + (x + 175) + " 70l6 5-6 5", fill: "none", stroke: "#3a444d", "stroke-width": 2
+        }));
+      }
+    });
+    return root;
   }
 
   function mixSeed(seed, key, index) {
@@ -94,6 +240,7 @@
       var mixed = mixSeed(seed, item.peptide.candidate_key, index);
       return {
         item: item,
+        index: index,
         delay: seededUnit(mixed, 0) * 1300,
         duration: 6200 + seededUnit(mixed, 1) * 1800,
         lane: (seededUnit(mixed, 2) - 0.5) * 92,
@@ -126,7 +273,7 @@
 
   function tooltipText(item) {
     var peptide = item.peptide;
-    var binding = peptide.scores.binding[peptide.best_allele];
+    var binding = bestBinding(peptide);
     return item.mutation.gene + " " + item.mutation.change + " · " + peptide.seq +
       " · cleavage " + fixed(peptide.scores.cleavage, 3) +
       " · TAP " + fixed(peptide.scores.tap, 3) +
@@ -137,7 +284,23 @@
       " · reasons " + peptide.reason_codes.join(", ");
   }
 
-  function render(container, results, schematics) {
+  /* Gate attrition counted from serialized reason codes; counting is not thresholding. */
+  function gateAttrition(candidates) {
+    var stopped = STAGES.map(function () { return 0; });
+    candidates.forEach(function (item) {
+      var rejection = rejectionFor(item.peptide);
+      if (rejection) { stopped[rejection.stage] += 1; }
+    });
+    var remaining = candidates.length;
+    return STAGES.map(function (stage, index) {
+      var entering = remaining;
+      remaining -= stopped[index];
+      return { stage: stage, entering: entering, stopped: stopped[index], leaving: remaining };
+    });
+  }
+
+  function render(container, results, schematics, selection) {
+    UI = global.KEYHOLE.ui;
     var candidates = [];
     results.mutations.forEach(function (mutation, mutationIndex) {
       mutation.peptides.forEach(function (peptide, peptideIndex) {
@@ -160,8 +323,10 @@
     var lastPositions = [];
     var hoverPoint = null;
     var sceneController = null;
+    var radarController = null;
     var currentFallback = null;
     var particles = buildParticles(candidates, results.meta.seed);
+    var attrition = gateAttrition(candidates);
     var animationEnd = particles.reduce(function (maximum, particle) {
       var tail = particle.rejection ? Math.max(1, STAGES[particle.rejection.stage].progress + 0.18) : 1;
       return Math.max(maximum, particle.delay + particle.duration * tail);
@@ -172,64 +337,178 @@
     var canvasAvailable = true;
     var fallbackMode = reducedMotion;
 
-    var witness = node("section", "funnel-witness");
-    witness.style.position = "relative";
-    var truth = node("strong", "scene-truth schematic", FUNNEL_TRUTH);
-    witness.appendChild(truth);
-    witness.appendChild(node(
-      "p",
-      "scene-detail",
-      "One particle represents each real serialized candidate; scores, reasons, and outcomes are real report data, while paths and timing are illustrative."
-    ));
-    var witnessControls = node("div", "scene-controls");
-    var replay = node("button", "", "Replay candidate flow");
-    replay.type = "button";
-    replay.setAttribute("aria-label", "Replay the deterministic candidate funnel animation");
-    witnessControls.appendChild(replay);
-    witnessControls.appendChild(node(
-      "span", "", candidates.length + " real mutation-derived peptide candidates · seed " + results.meta.seed
-    ));
-    witness.appendChild(witnessControls);
+    /* ---------------------------------------------------------- witness figure */
+    var witnessFig = UI.figure({
+      className: "fig-witness",
+      label: "Figure 1",
+      title: "Every candidate, one particle, four inspection gates",
+      truth: FUNNEL_TRUTH,
+      truthKind: "schematic",
+      description: "One particle represents each real serialized candidate. Scores, gate " +
+        "outcomes, rejection colours, and counts are report data; particle paths and timing " +
+        "are illustrative.",
+      dataSummary: "Gate attrition counted from serialized reason codes"
+    });
+    witnessFig.viewport.style.position = "relative";
+    container.appendChild(witnessFig.root);
 
-    var canvas = node("canvas", "funnel-particle-canvas");
+    var canvas = node("canvas", "witness-canvas");
     canvas.setAttribute("role", "img");
     canvas.setAttribute(
       "aria-label",
       "Schematic candidate particles moving through Proteasome, TAP, HLA keyhole, and self-scan stages"
     );
-    canvas.style.display = "block";
-    canvas.style.width = "100%";
-    canvas.style.height = "280px";
-    canvas.style.borderRadius = ".75rem";
-    canvas.style.marginTop = ".7rem";
-    witness.appendChild(canvas);
+    witnessFig.viewport.appendChild(canvas);
 
     var tooltip = node("div", "funnel-tooltip");
     tooltip.hidden = true;
     tooltip.setAttribute("role", "status");
-    tooltip.style.position = "absolute";
-    tooltip.style.zIndex = "4";
-    tooltip.style.maxWidth = "min(36rem, 90%)";
-    tooltip.style.padding = ".45rem .6rem";
-    tooltip.style.border = "1px solid #6e8ca2";
-    tooltip.style.borderRadius = ".45rem";
-    tooltip.style.background = "#07111bf2";
-    tooltip.style.pointerEvents = "none";
-    witness.appendChild(tooltip);
-    container.appendChild(witness);
+    witnessFig.viewport.appendChild(tooltip);
 
-    var select = node("select", "candidate-select");
-    select.setAttribute("aria-label", "Choose mutation-derived peptide");
-    candidates.forEach(function (item, index) {
-      var option = node(
-        "option", "", item.mutation.gene + " " + item.mutation.protein_effect + " · " + item.peptide.seq
+    var replay = UI.button("btn btn-quiet", "Replay candidate flow");
+    replay.setAttribute("aria-label", "Replay the deterministic candidate funnel animation");
+    witnessFig.addControl(replay);
+    witnessFig.hint(candidates.length + " real mutation-derived candidates · seed " + results.meta.seed);
+    STAGES.forEach(function (stage, index) {
+      witnessFig.addLegend(
+        index === 2 ? "#5b9dff" : "#8b949e",
+        stage.name + " — " + stage.method
       );
-      option.value = String(index);
-      select.appendChild(option);
     });
-    container.appendChild(select);
-    var host = node("div", "candidate-detail");
-    container.appendChild(host);
+    Object.keys(REASON_COLORS).forEach(function (reason) {
+      witnessFig.addLegend(REASON_COLORS[reason], reason.replaceAll("_", " ").toLowerCase() + " rejection");
+    });
+
+    var attritionTable = UI.table([
+      "Gate", "Method", { label: "Entering", numeric: true },
+      { label: "Stopped here", numeric: true }, { label: "Continuing", numeric: true }
+    ]);
+    attrition.forEach(function (entry) {
+      UI.row(attritionTable.body, [
+        entry.stage.name,
+        entry.stage.method,
+        { text: entry.entering, className: "numeric" },
+        { text: entry.stopped, className: "numeric" },
+        { text: entry.leaving, className: "numeric" }
+      ]);
+    });
+    witnessFig.dataBody.appendChild(attritionTable.wrap);
+    witnessFig.dataBody.appendChild(node(
+      "p", "fig-note",
+      "Attrition is a count of serialized rejection reason codes. Reason codes are produced " +
+        "once, in Python; this figure never re-applies a threshold."
+    ));
+
+    /* -------------------------------------------------------- candidate browser */
+    var browserWrap = node("div", "split split-wide");
+    container.appendChild(browserWrap);
+    var browserColumn = node("div", "");
+    var evidenceColumn = node("div", "");
+    browserWrap.appendChild(browserColumn);
+    browserWrap.appendChild(evidenceColumn);
+
+    browserColumn.appendChild(node("h3", "", "Choose a candidate"));
+    browserColumn.appendChild(node(
+      "p", "fig-note",
+      "Selecting a candidate here also drives the population coverage figure below."
+    ));
+    var head = node("div", "browser-head");
+    var chips = {};
+    FILTERS.forEach(function (definition) {
+      var chip = UI.button("chip", definition[1]);
+      chip.appendChild(node("span", "count", String(countFor(candidates, definition[0]))));
+      chip.setAttribute("aria-pressed", definition[0] === "ALL" ? "true" : "false");
+      chip.dataset.verdict = definition[0];
+      chips[definition[0]] = chip;
+      head.appendChild(chip);
+    });
+    var search = node("input", "filter-search");
+    search.type = "search";
+    search.setAttribute("aria-label", "Filter candidates by gene or peptide sequence");
+    search.placeholder = "filter by gene or sequence";
+    head.appendChild(search);
+    browserColumn.appendChild(head);
+
+    var list = node("div", "candidate-list");
+    list.setAttribute("role", "listbox");
+    list.setAttribute("aria-label", "Mutation-derived peptide candidates");
+    browserColumn.appendChild(list);
+
+    var host = node("div", "evidence");
+    evidenceColumn.appendChild(host);
+
+    /* The two candidate figures sit side by side at full width so neither column of the
+       browser row grows to three times the height of the other. */
+    var analysisWrap = node("div", "split");
+    var radarHost = node("div", "");
+    var sceneHost = node("div", "");
+    analysisWrap.appendChild(radarHost);
+    analysisWrap.appendChild(sceneHost);
+    container.appendChild(analysisWrap);
+
+    var selected = 0;
+    var filterVerdict = "ALL";
+    var queryText = "";
+
+    function matchesFilter(item) {
+      if (filterVerdict !== "ALL" && item.peptide.verdict !== filterVerdict) { return false; }
+      if (!queryText) { return true; }
+      var haystack = (
+        item.mutation.gene + " " + item.mutation.protein_effect + " " +
+        item.peptide.seq + " " + item.peptide.wt_seq
+      ).toLowerCase();
+      return haystack.indexOf(queryText) !== -1;
+    }
+
+    function visibleIndices() {
+      var indices = [];
+      candidates.forEach(function (item, index) {
+        if (matchesFilter(item)) { indices.push(index); }
+      });
+      return indices;
+    }
+
+    function renderList() {
+      list.replaceChildren();
+      var indices = visibleIndices();
+      if (!indices.length) {
+        list.appendChild(node("p", "fig-status", "No candidates match the current filter."));
+        return indices;
+      }
+      if (indices.indexOf(selected) === -1) { selected = indices[0]; }
+      indices.forEach(function (index) {
+        var item = candidates[index];
+        var row = UI.button("candidate-row", "");
+        row.dataset.index = String(index);
+        row.setAttribute("role", "option");
+        row.setAttribute("aria-selected", index === selected ? "true" : "false");
+        var gene = node("span", "row-gene", item.mutation.gene);
+        gene.appendChild(node("span", "change", item.mutation.protein_effect));
+        row.appendChild(gene);
+        var binding = bestBinding(item.peptide);
+        var meta = node("span", "row-meta");
+        meta.appendChild(node(
+          "span", "badge " + UI.verdictClass(item.peptide.verdict),
+          UI.verdictLabel(item.peptide.verdict)
+        ));
+        meta.appendChild(node(
+          "span", "row-rank", item.peptide.best_allele + " · " + fixed(binding.rank, 2) + "%"
+        ));
+        row.appendChild(meta);
+        var rowSeq = sequenceNode(item.peptide);
+        rowSeq.classList.add("row-seq");
+        row.appendChild(rowSeq);
+        list.appendChild(row);
+      });
+      return indices;
+    }
+
+    function applyFilter() {
+      try {
+        renderList();
+        update();
+      } catch (error) { fail(error); }
+    }
 
     var context = null;
     try {
@@ -242,8 +521,8 @@
 
     function dimensions() {
       return {
-        width: Math.max(560, Math.round(witness.clientWidth || 920)),
-        height: 280
+        width: Math.max(280, Math.round(witnessFig.viewport.clientWidth || 900)),
+        height: 260
       };
     }
 
@@ -257,42 +536,42 @@
     }
 
     function drawStages(size) {
-      var background = context.createLinearGradient(0, 0, size.width, size.height);
-      background.addColorStop(0, "#081722");
-      background.addColorStop(1, "#10283a");
-      context.fillStyle = background;
+      context.fillStyle = "#0a0d10";
       context.fillRect(0, 0, size.width, size.height);
-      context.strokeStyle = "rgba(120,170,195,.38)";
-      context.lineWidth = 3;
+      /* The lane band matches exactly where particles travel; nothing decorative. */
+      var laneTop = size.height * 0.58 - 52;
+      context.fillStyle = "rgba(91,157,255,.045)";
+      context.fillRect(size.width * 0.05, laneTop, size.width * 0.90, 104);
+      context.strokeStyle = "rgba(38,45,52,.9)";
+      context.lineWidth = 1;
       context.beginPath();
       context.moveTo(size.width * 0.05, size.height * 0.58);
-      context.bezierCurveTo(
-        size.width * 0.30, size.height * 0.38,
-        size.width * 0.64, size.height * 0.76,
-        size.width * 0.95, size.height * 0.58
-      );
+      context.lineTo(size.width * 0.95, size.height * 0.58);
       context.stroke();
+
       STAGES.forEach(function (stage, index) {
         var x = size.width * (0.05 + stage.progress * 0.90);
-        context.fillStyle = index === 2 ? "rgba(80,191,202,.20)" : "rgba(227,167,47,.14)";
-        context.strokeStyle = index === 2 ? "#50bfca" : "#b98a35";
-        context.lineWidth = 2;
+        var measured = index === 2;
+        context.strokeStyle = measured ? "rgba(91,157,255,.55)" : "rgba(120,130,140,.4)";
+        context.lineWidth = 1;
+        context.setLineDash(measured ? [] : [3, 3]);
         context.beginPath();
-        context.rect(x - 58, 36, 116, 62);
-        context.fill();
+        context.moveTo(x, 46);
+        context.lineTo(x, size.height - 16);
         context.stroke();
+        context.setLineDash([]);
         context.textAlign = "center";
-        context.fillStyle = "#eaf2f7";
-        context.font = "700 13px system-ui, sans-serif";
-        context.fillText(stage.name, x, 59);
-        context.fillStyle = "#8fcbd0";
-        context.font = "10px system-ui, sans-serif";
-        context.fillText(stage.method, x, 79);
-        context.strokeStyle = "rgba(150,190,210,.24)";
-        context.beginPath();
-        context.moveTo(x, 101);
-        context.lineTo(x, size.height - 20);
-        context.stroke();
+        context.fillStyle = measured ? "#ededed" : "#a3adb6";
+        context.font = "500 11.5px ui-sans-serif, system-ui, sans-serif";
+        context.fillText(stage.name, x, 22);
+        context.fillStyle = measured ? "#5b9dff" : "#6f787f";
+        context.font = "9.5px ui-monospace, SFMono-Regular, Menlo, monospace";
+        context.fillText(measured ? "measured ML" : "heuristic", x, 36);
+        var entry = attrition[index];
+        context.fillStyle = "#6f787f";
+        context.fillText(
+          entry.entering + " in · " + entry.stopped + " stopped", x, size.height - 4
+        );
       });
       context.textAlign = "start";
     }
@@ -307,20 +586,25 @@
         var state = particleState(particle, elapsed, size.width, size.height);
         if (!state || state.y > size.height + 20) { return; }
         var rejectionColor = particle.rejection ? particle.rejection.color : null;
-        var color = rejectionColor ||
-          (particle.item.peptide.verdict === "VISIBLE_CLEAR" ? "#67cf9a" : "#f3bf4d");
+        var color = rejectionColor || VERDICT_COLORS[particle.item.peptide.verdict] || "#8b949e";
+        var isSelected = particle.index === selected;
         context.globalAlpha = state.alpha;
         context.fillStyle = color;
         context.beginPath();
         context.arc(state.x, state.y, particle.radius, 0, Math.PI * 2);
         context.fill();
-        context.strokeStyle = "rgba(255,255,255,.75)";
-        context.lineWidth = 1;
-        context.stroke();
+        if (isSelected) {
+          context.globalAlpha = 1;
+          context.strokeStyle = "#ededed";
+          context.lineWidth = 1.6;
+          context.beginPath();
+          context.arc(state.x, state.y, particle.radius + 4.5, 0, Math.PI * 2);
+          context.stroke();
+        }
         if (state.flash > 0) {
           context.globalAlpha = state.flash;
           context.strokeStyle = color;
-          context.lineWidth = 2.5;
+          context.lineWidth = 2;
           context.beginPath();
           context.arc(state.x, state.y, particle.radius + 5 + state.flash * 7, 0, Math.PI * 2);
           context.stroke();
@@ -334,9 +618,6 @@
         });
       });
       if (hoverPoint) { updateTooltip(); }
-      context.fillStyle = "#aebdca";
-      context.font = "11px system-ui, sans-serif";
-      context.fillText("Rejections flash and fall in serialized reason colors", 14, size.height - 10);
     }
 
     function cancelAnimation() {
@@ -355,6 +636,11 @@
         drawParticles(lastElapsed);
         if (lastElapsed <= animationEnd) {
           frameId = global.requestAnimationFrame(animationFrame);
+        } else {
+          witnessFig.setStatus(
+            "Flow complete. " + attrition[STAGES.length - 1].leaving + " of " +
+              candidates.length + " candidates reached the final verdict stage."
+          );
         }
       } catch (error) {
         fail(error);
@@ -380,56 +666,161 @@
       if (fallbackMode) {
         cancelAnimation();
         tooltip.hidden = true;
+        witnessFig.setStatus(
+          !canvasAvailable ?
+            "Canvas is unavailable, so the complete serialized gate evidence is shown instead." :
+            "Reduced motion is enabled, so the animation is disabled and the complete serialized " +
+              "gate table and stage evidence are shown instead."
+        );
+        witnessFig.data.open = true;
+      } else {
+        witnessFig.setStatus("Deterministic flow ready · seed " + results.meta.seed + ".");
       }
     }
 
+    /* ------------------------------------------------------------ evidence view */
     function update() {
-      if (sceneController) {
-        sceneController.destroy();
-        sceneController = null;
-      }
+      if (sceneController) { sceneController.destroy(); sceneController = null; }
+      if (radarController) { radarController.destroy(); radarController = null; }
       host.replaceChildren();
-      var item = candidates[Number(select.value) || 0];
+      var item = candidates[selected];
       var peptide = item.peptide;
-      host.appendChild(node("h3", "", item.mutation.gene + " " + item.mutation.protein_effect));
+      var binding = bestBinding(peptide);
+      var gates = gateEvidence(peptide);
+
+      var evidenceHead = node("div", "evidence-head");
+      evidenceHead.appendChild(node("h3", "", item.mutation.gene + " " + item.mutation.protein_effect));
+      evidenceHead.appendChild(node(
+        "span", "badge " + UI.verdictClass(peptide.verdict), UI.verdictLabel(peptide.verdict)
+      ));
+      host.appendChild(evidenceHead);
       host.appendChild(sequenceNode(peptide));
       host.appendChild(node(
-        "p", "", "Wild type: " + (peptide.wt_seq || "not available") + " · mutation index " + peptide.position
+        "p", "fig-status",
+        "wild type " + (peptide.wt_seq || "not available") +
+          " · mutated position " + (Number(peptide.position) + 1) + " of " + peptide.seq.length +
+          " · protein start " + peptide.protein_start +
+          " · source " + peptide.source
       ));
-      host.appendChild(node(
-        "span",
-        "badge " + peptide.verdict.toLowerCase().replaceAll("_", "-"),
-        peptide.verdict.replaceAll("_", " ")
-      ));
-      host.appendChild(node("p", "", peptide.plain_language));
+      host.appendChild(node("p", "verdict-line", peptide.plain_language));
+
+      var gateList = node("ul", "gate-list");
+      gates.forEach(function (gate) {
+        var stateClass = gate.state === "stopped" ? "is-stop" :
+          (gate.state === "pass" ? "is-pass" : "is-skip");
+        var entry = node("li", "gate " + stateClass);
+        entry.appendChild(node("span", "gate-dot"));
+        var name = node("span", "gate-name", gate.label);
+        name.appendChild(node("small", "", gate.method + (gate.note ? " · " + gate.note : "")));
+        entry.appendChild(name);
+        entry.appendChild(node("span", "gate-value", gate.display));
+        gateList.appendChild(entry);
+      });
+      host.appendChild(gateList);
+
+      var reasons = node("p", "fig-status", "serialized reason codes: " + peptide.reason_codes.join(", "));
+      host.appendChild(reasons);
 
       var stageFallback = node("details", "funnel-static-fallback");
       stageFallback.appendChild(node(
         "summary", "", "Static serialized stage evidence (reduced-motion/no-canvas fallback)"
       ));
       var flowHost = node("div", "");
-      flowHost.innerHTML = flowSvg(peptide);
+      flowHost.appendChild(flowSvg(peptide));
       stageFallback.appendChild(flowHost);
       host.appendChild(stageFallback);
       currentFallback = stageFallback;
-      syncFallbackMode();
 
-      var scores = node("div", "score-grid");
-      Object.keys(peptide.scores.binding).forEach(function (allele) {
+      var alleleTable = UI.table([
+        "Supplied allele", { label: "IC50 nM", numeric: true }, { label: "Percentile rank", numeric: true }, "Method"
+      ]);
+      Object.keys(peptide.scores.binding).sort().forEach(function (allele) {
         var value = peptide.scores.binding[allele];
-        scores.appendChild(node(
-          "div", "", allele + " · " + fixed(value.ic50, 1) + " nM · rank " +
-            fixed(value.rank, 2) + "% · measured ML"
-        ));
+        UI.row(alleleTable.body, [
+          allele + (allele === peptide.best_allele ? " (best)" : ""),
+          { text: fixed(value.ic50, 1), className: "numeric" },
+          { text: fixed(value.rank, 2), className: "numeric" },
+          "measured ML"
+        ]);
       });
-      scores.appendChild(node(
-        "div", "", "Agretopicity: " + fixed(peptide.agretopicity, 3) + " · heuristic approximation"
-      ));
-      scores.appendChild(node("div", "", "Reasons: " + peptide.reason_codes.join(", ")));
-      host.appendChild(scores);
-      var sceneHost = node("div", "candidate-scene-host");
-      host.appendChild(sceneHost);
-      sceneController = global.KEYHOLE.scene.mount(sceneHost, schematics[item.key]);
+      var bindingDetails = node("details", "");
+      bindingDetails.appendChild(node("summary", "", "Per-allele binding evidence for this candidate"));
+      var bindingBody = node("div", "");
+      bindingBody.appendChild(alleleTable.wrap);
+      bindingDetails.appendChild(bindingBody);
+      host.appendChild(bindingDetails);
+
+      /* Radar profile figure. */
+      radarHost.replaceChildren();
+      sceneHost.replaceChildren();
+      var radarFig = UI.figure({
+        className: "fig-radar",
+        label: "Figure 2",
+        title: "Gate evidence profile for " + peptide.seq,
+        truth: "Axis positions are bounded display normalisations of the exact serialized " +
+          "values printed beside each axis — not a composite score",
+        truthKind: "schematic",
+        description: "Outward means evidence more favourable to display. A red axis is the " +
+          "gate whose serialized reason code stopped this candidate; a grey value marks a " +
+          "gate the pipeline never reached.",
+        dataSummary: "Axis domains and exact serialized values"
+      });
+      radarHost.appendChild(radarFig.root);
+      radarController = global.KEYHOLE.charts.radar(radarFig.viewport, {
+        title: "Gate evidence profile for " + peptide.seq,
+        description: "Cleavage, TAP transport, HLA fit, foreignness, and mutant-versus-wild-type " +
+          "differential binding for one serialized candidate.",
+        ariaLabel: "Gate evidence profile for " + peptide.seq +
+          "; exact values are listed in the table below this figure",
+        metrics: gates.map(function (gate) {
+          return {
+            key: gate.key,
+            label: gate.short,
+            /* Axis labels stay short so they cannot truncate; the gate ladder and the
+               data table beneath carry the full serialized value. */
+            display: gate.axis === undefined ? gate.display : gate.axis,
+            method: gate.method === "measured ML" ? "measured ML" : "heuristic",
+            state: gate.state
+          };
+        }),
+        series: [{
+          label: peptide.seq,
+          color: VERDICT_COLORS[peptide.verdict] || "#8b949e",
+          variant: "solid",
+          values: gates.reduce(function (values, gate) {
+            values[gate.key] = gate.norm;
+            return values;
+          }, {})
+        }]
+      });
+      var domainTable = UI.table(["Axis", "Serialized value", "Display domain", "Method", "Gate state"]);
+      var domains = {
+        cleavage: "0 to 1 directly",
+        tap: "0 to 1 directly",
+        binding: "0 to 20% percentile rank, inverted and clipped",
+        foreignness: "0 to 1 directly",
+        differential: "0 to 3\u00d7 wild-type/mutant IC50 ratio, clipped"
+      };
+      gates.forEach(function (gate) {
+        UI.row(domainTable.body, [
+          gate.label, gate.display, domains[gate.key], gate.method,
+          gate.state === "stopped" ? "stopped here" :
+            (gate.state === "pass" ? "continued" : "not reached")
+        ]);
+      });
+      radarFig.dataBody.appendChild(domainTable.wrap);
+
+      /* Molecular scene for the selected candidate. */
+      sceneController = global.KEYHOLE.molecule.mount(sceneHost, schematics[item.key], {
+        label: "Figure 3",
+        title: "Candidate " + peptide.seq + " on the measured 1HHK backbone",
+        compact: true
+      });
+
+      syncFallbackMode();
+      if (selection) {
+        selection.set(selected, String(peptide.candidate_key), "funnel");
+      }
     }
 
     function updateTooltip() {
@@ -463,8 +854,8 @@
       hoverPoint = {
         x: (event.clientX - bounds.left) * size.width / Math.max(1, bounds.width),
         y: (event.clientY - bounds.top) * size.height / Math.max(1, bounds.height),
-        left: Math.min(bounds.width - 280, Math.max(8, event.clientX - bounds.left + 12)),
-        top: Math.max(105, event.clientY - bounds.top - 12)
+        left: Math.min(Math.max(8, bounds.width - 300), Math.max(8, event.clientX - bounds.left + 12)),
+        top: Math.max(52, event.clientY - bounds.top - 12)
       };
       updateTooltip();
     }
@@ -475,11 +866,16 @@
     }
 
     var resizeObserver = null;
+    var unsubscribeSelection = null;
+
     function teardown() {
       if (destroyed) { return; }
       destroyed = true;
       cancelAnimation();
-      select.removeEventListener("change", selectionChanged);
+      list.removeEventListener("click", listClicked);
+      list.removeEventListener("keydown", listKeys);
+      head.removeEventListener("click", filtersClicked);
+      search.removeEventListener("input", searchInput);
       replay.removeEventListener("click", replayClicked);
       canvas.removeEventListener("pointermove", pointerMove);
       canvas.removeEventListener("pointerleave", pointerLeave);
@@ -490,28 +886,71 @@
           motionQuery.removeListener(motionChanged);
         }
       }
-      if (resizeObserver) { resizeObserver.disconnect(); }
+      if (resizeObserver) { resizeObserver.disconnect(); resizeObserver = null; }
+      if (unsubscribeSelection) { unsubscribeSelection(); unsubscribeSelection = null; }
       if (sceneController) { sceneController.destroy(); sceneController = null; }
+      if (radarController) { radarController.destroy(); radarController = null; }
       container.replaceChildren();
     }
 
     function fail(error) {
       teardown();
       var failure = node(
-        "div", "fatal", "Funnel rendering failed: " + error.message + ". Serialized evidence remains embedded."
+        "div", "fatal",
+        "Funnel rendering failed: " + error.message + ". Serialized evidence remains embedded."
       );
       failure.setAttribute("role", "alert");
       container.appendChild(failure);
     }
 
-    function selectionChanged() {
+    function selectIndex(index) {
+      if (index === selected) { return; }
+      selected = index;
       try { update(); }
-      catch (error) { fail(error); }
+      catch (error) { fail(error); return; }
+      renderList();
     }
+
+    function listClicked(event) {
+      var row = event.target.closest ? event.target.closest("button[data-index]") : null;
+      if (!row || !list.contains(row)) { return; }
+      selectIndex(Number(row.dataset.index));
+    }
+
+    function listKeys(event) {
+      if (event.key !== "ArrowDown" && event.key !== "ArrowUp") { return; }
+      var indices = visibleIndices();
+      var position = indices.indexOf(selected);
+      if (position === -1) { return; }
+      var next = event.key === "ArrowDown" ?
+        Math.min(indices.length - 1, position + 1) : Math.max(0, position - 1);
+      if (next === position) { return; }
+      event.preventDefault();
+      selectIndex(indices[next]);
+      var target = list.querySelector('button[data-index="' + indices[next] + '"]');
+      if (target) { target.focus(); }
+    }
+
+    function filtersClicked(event) {
+      var chip = event.target.closest ? event.target.closest("button[data-verdict]") : null;
+      if (!chip || !head.contains(chip)) { return; }
+      filterVerdict = chip.dataset.verdict;
+      Object.keys(chips).forEach(function (verdict) {
+        chips[verdict].setAttribute("aria-pressed", verdict === filterVerdict ? "true" : "false");
+      });
+      applyFilter();
+    }
+
+    function searchInput() {
+      queryText = search.value.trim().toLowerCase();
+      applyFilter();
+    }
+
     function replayClicked() {
       try { replayAnimation(); }
       catch (error) { fail(error); }
     }
+
     function motionChanged(event) {
       try {
         reducedMotion = event.matches;
@@ -523,7 +962,10 @@
     }
 
     try {
-      select.addEventListener("change", selectionChanged);
+      list.addEventListener("click", listClicked);
+      list.addEventListener("keydown", listKeys);
+      head.addEventListener("click", filtersClicked);
+      search.addEventListener("input", searchInput);
       replay.addEventListener("click", replayClicked);
       canvas.addEventListener("pointermove", pointerMove);
       canvas.addEventListener("pointerleave", pointerLeave);
@@ -542,8 +984,18 @@
             fail(error);
           }
         });
-        resizeObserver.observe(witness);
+        resizeObserver.observe(witnessFig.viewport);
       }
+      if (selection) {
+        unsubscribeSelection = selection.subscribe(function (state) {
+          if (state.origin === "funnel" || destroyed) { return; }
+          if (state.index === selected) { return; }
+          selected = state.index;
+          try { update(); } catch (error) { fail(error); return; }
+          renderList();
+        });
+      }
+      renderList();
       update();
       syncFallbackMode();
       if (!fallbackMode) { replayAnimation(); }

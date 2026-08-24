@@ -1,14 +1,30 @@
-/* KEYHOLE population atlas renderer; never recomputes coverage. */
+/* KEYHOLE population coverage renderer; never recomputes coverage.
+ *
+ * Scientific contract: only the serialized AFR/AMR/EAS/EUR marginals and the serialized
+ * cohort-weighted ALL_OBSERVED aggregate are shown. ALL_OBSERVED is never plotted on the
+ * globe and is never described as worldwide. SAS is absent from the frozen panel and is
+ * therefore reported as absent rather than as zero. Exact numbers are always present as
+ * text, whether or not any graphics context exists.
+ */
 (function (global) {
   "use strict";
 
+  var UI = null;
   var ATLAS_TRUTH = "Schematic — data real, geometry illustrative";
   var POPULATIONS = ["AFR", "AMR", "EAS", "EUR", "ALL_OBSERVED"];
+  var COHORTS = ["AFR", "AMR", "EAS", "EUR"];
+  var COHORT_COLORS = {
+    AFR: "#e8b45c",
+    AMR: "#dd7871",
+    EAS: "#66c2d9",
+    EUR: "#a394de",
+    ALL_OBSERVED: "#8b949e"
+  };
   var ILLUSTRATIVE_MARKERS = {
-    AFR: { longitude: 20, latitude: 2, color: "#e7a94c" },
-    AMR: { longitude: -76, latitude: 12, color: "#d8756f" },
-    EAS: { longitude: 112, latitude: 35, color: "#65b9cf" },
-    EUR: { longitude: 15, latitude: 52, color: "#8f8bd8" }
+    AFR: { longitude: 21, latitude: 2, color: "#e8b45c" },
+    AMR: { longitude: -74, latitude: 5, color: "#dd7871" },
+    EAS: { longitude: 112, latitude: 35, color: "#66c2d9" },
+    EUR: { longitude: 12, latitude: 52, color: "#a394de" }
   };
 
   function node(tag, className, text) {
@@ -18,25 +34,14 @@
     return element;
   }
 
-  function tableWithHeadings(headings, className) {
-    var table = node("table", className || "");
-    var head = node("tr", "");
-    headings.forEach(function (text) { head.appendChild(node("th", "", text)); });
-    var thead = node("thead", "");
-    thead.appendChild(head);
-    table.appendChild(thead);
-    var body = node("tbody", "");
-    table.appendChild(body);
-    return { table: table, body: body };
-  }
-
   function projected(longitude, latitude, rotation, radius, centerX, centerY) {
     return global.KEYHOLEProjection.orthographic(
       longitude, latitude, rotation, radius, centerX, centerY
     );
   }
 
-  function render(container, results) {
+  function render(container, results, selection) {
+    UI = global.KEYHOLE.ui;
     var population = results.population;
     var keys = Object.keys(population.per_candidate_coverage);
     if (!keys.length) {
@@ -52,73 +57,143 @@
     var currentKey = keys[0];
     var currentCoverage = population.per_candidate_coverage[currentKey];
     var resizeObserver = null;
+    var globeController = null;
+    var barsController = null;
+    var unsubscribeSelection = null;
+    var useWebglGlobe = global.KEYHOLE.globe.supported();
 
+    /* ------------------------------------------------------------- controls */
+    var chooser = node("div", "browser-head");
+    var chooserLabel = node("label", "fig-hint", "Candidate peptide");
+    chooserLabel.setAttribute("for", "atlas-candidate");
     var selector = node("select", "");
+    selector.id = "atlas-candidate";
     selector.setAttribute("aria-label", "Choose peptide for population coverage");
     keys.forEach(function (key) {
       var option = node("option", "", key);
       option.value = key;
       selector.appendChild(option);
     });
-    container.appendChild(selector);
+    chooser.appendChild(chooserLabel);
+    chooser.appendChild(selector);
+    container.appendChild(chooser);
 
-    var host = node("section", "population-atlas");
-    var truth = node("strong", "scene-truth schematic", ATLAS_TRUTH);
-    host.appendChild(truth);
-    host.appendChild(node(
-      "p",
-      "scene-detail",
-      "Coverage values and cohort labels are real serialized results; marker locations, globe geometry, and graticule are illustrative."
+    /* The illustrative globe and the exact bar chart sit side by side, so the picture
+       and the numbers it stands for are always read together. */
+    var coverageRow = node("div", "split");
+    container.appendChild(coverageRow);
+    var globeColumn = node("div", "");
+    var barsColumn = node("div", "");
+    coverageRow.appendChild(globeColumn);
+    coverageRow.appendChild(barsColumn);
+
+    /* --------------------------------------------------------- globe figure */
+    var globeFig = UI.figure({
+      className: "fig-globe",
+      label: "Figure 4",
+      title: "Where a compatible keyhole has been observed",
+      truth: ATLAS_TRUTH,
+      truthKind: "schematic",
+      description: "Coverage values and cohort labels are serialized results. Marker " +
+        "positions are editorial centroids for four cohorts, marker size is a bounded " +
+        "display scale, and the geography is presentation only. ALL_OBSERVED is never " +
+        "drawn on the globe because it is a cohort-weighted aggregate, not a place.",
+      dataSummary: "Marker placement, display scale, and cohort assumptions"
+    });
+    globeColumn.appendChild(globeFig.root);
+    var globeStage = node("div", "globe-stage");
+    globeStage.tabIndex = 0;
+    globeStage.setAttribute("role", "img");
+    globeFig.viewport.appendChild(globeStage);
+    var globeStatus = globeFig.status;
+    COHORTS.forEach(function (cohort) {
+      globeFig.addLegend(COHORT_COLORS[cohort], cohort + " — illustrative centroid marker");
+    });
+    var resetGlobeButton = UI.button("btn btn-quiet", "Reset globe");
+    resetGlobeButton.setAttribute("aria-label", "Reset the population globe rotation");
+    globeFig.addControl(resetGlobeButton);
+    globeFig.hint("drag or use arrow keys to rotate · Home resets");
+
+    /* ----------------------------------------------------------- bar figure */
+    var barsFig = UI.figure({
+      className: "fig-coverage-bars",
+      label: "Figure 5",
+      title: "Exact coverage for the selected candidate",
+      truth: "Serialized heuristic Monte Carlo coverage; hatched fills mark every " +
+        "heuristic-approximation value",
+      truthKind: "schematic",
+      description: "The horizontal axis maximum is scaled to the largest plotted value, so " +
+        "the exact percentage is printed on every bar. The aggregate row is separated " +
+        "because it is a cohort weighting of the four rows above it, not a fifth population.",
+      dataSummary: "Serialized coverage, assumptions, and absent populations"
+    });
+    barsColumn.appendChild(barsFig.root);
+    barsFig.addLegend("#8b949e", "hatched fill — heuristic approximation", "swatch-illustrative");
+
+    /* --------------------------------------- exact serialized value tables */
+    var tables = node("div", "split");
+    var coverageBlock = node("div", "");
+    coverageBlock.appendChild(node("h3", "", "Exact serialized population coverage"));
+    var coverageTable = UI.table(
+      ["Population", { label: "Coverage percent", numeric: true }, "Method"], "coverage-table"
+    );
+    coverageBlock.appendChild(coverageTable.wrap);
+    var absence = node(
+      "p", "fig-note",
+      "SAS is absent because the frozen panel contains no SAS observations; it is not " +
+        "reported as zero. HLA alleles outside the 26-model panel are unknown, not invisible."
+    );
+    coverageBlock.appendChild(absence);
+    tables.appendChild(coverageBlock);
+    var assumptionBlock = node("div", "");
+    assumptionBlock.appendChild(node("h3", "", "How this coverage was computed"));
+    tables.appendChild(assumptionBlock);
+
+    var matrixBlock = node("div", "");
+    matrixBlock.appendChild(node("h3", "", "Peptide × modeled allele evidence"));
+    matrixBlock.appendChild(node(
+      "p", "fig-note",
+      "All 26 frozen models are evaluated for population coverage. Only the alleles supplied " +
+        "on the command line can affect the verdicts above."
     ));
-    var controls = node("div", "scene-controls");
-    var reset = node("button", "", "Reset globe");
-    reset.type = "button";
-    reset.setAttribute("aria-label", "Reset population globe rotation");
-    controls.appendChild(reset);
-    controls.appendChild(node("span", "", "Drag or use arrow keys to rotate · Home resets"));
-    host.appendChild(controls);
+    var matrixTable = UI.table(
+      [
+        "Allele", { label: "IC50 nM", numeric: true }, { label: "Rank %", numeric: true },
+        "Verdict", "Visible", "Method"
+      ],
+      "allele-matrix"
+    );
+    matrixTable.wrap.classList.add("scroll-pane");
+    matrixBlock.appendChild(matrixTable.wrap);
+    var caveat = node("p", "caveat");
+    assumptionBlock.appendChild(caveat);
+    container.appendChild(tables);
+    container.appendChild(matrixBlock);
 
+    /* ------------------------------------------- Canvas 2D globe fallback */
     var canvas = node("canvas", "population-globe-canvas");
     canvas.tabIndex = 0;
     canvas.setAttribute("role", "img");
     canvas.style.display = "block";
     canvas.style.width = "100%";
     canvas.style.height = "410px";
-    canvas.style.margin = ".7rem 0";
-    canvas.style.borderRadius = ".75rem";
     canvas.style.touchAction = "none";
-    host.appendChild(canvas);
-
-    var canvasStatus = node("p", "scene-status", "Interactive coverage globe ready.");
-    canvasStatus.setAttribute("aria-live", "polite");
-    host.appendChild(canvasStatus);
-
-    host.appendChild(node("h3", "", "Exact serialized population coverage"));
-    var coverageWrap = node("div", "table-wrap");
-    var coverageTable = tableWithHeadings(["Population", "Coverage percent"], "coverage-table");
-    coverageWrap.appendChild(coverageTable.table);
-    host.appendChild(coverageWrap);
-
-    host.appendChild(node("h3", "", "Peptide × modeled allele evidence"));
-    var matrixWrap = node("div", "table-wrap");
-    var matrixTable = tableWithHeadings(
-      ["Allele", "IC50 nM", "Rank %", "Verdict", "Visible", "Method"],
-      "allele-matrix"
-    );
-    matrixWrap.appendChild(matrixTable.table);
-    host.appendChild(matrixWrap);
-    var caveat = node("p", "caveat");
-    host.appendChild(caveat);
-    container.appendChild(host);
 
     var context = null;
-    try {
-      context = canvas.getContext("2d", { alpha: false });
-      if (!context) { throw new Error("Canvas unavailable"); }
-    } catch (error) {
-      canvas.hidden = true;
-      canvasStatus.textContent = "Canvas unavailable; exact numeric coverage remains below.";
+    if (!useWebglGlobe) {
+      globeStage.appendChild(canvas);
+      try {
+        context = canvas.getContext("2d", { alpha: false });
+        if (!context) { throw new Error("Canvas unavailable"); }
+      } catch (error) {
+        canvas.hidden = true;
+        globeStatus.textContent =
+          "No graphics context is available, so the exact numeric coverage below is the " +
+          "complete evidence for this figure.";
+      }
     }
+
+    var host = globeStage;
 
     function dimensions() {
       var width = Math.max(1, Math.round(host.clientWidth || 900));
@@ -158,7 +233,7 @@
     }
 
     function drawGraticule(radius, centerX, centerY) {
-      context.strokeStyle = "rgba(174,205,221,.24)";
+      context.strokeStyle = "rgba(163,173,182,.2)";
       context.lineWidth = 1;
       for (var latitude = -60; latitude <= 60; latitude += 30) {
         var parallel = [];
@@ -184,20 +259,20 @@
         );
         if (!point.visible) { return; }
         var value = Number(currentCoverage[name]);
-        var markerRadius = 7 + value * 0.12;
-        context.globalAlpha = 0.52 + value * 0.0048;
+        var markerRadius = 6 + Math.min(1, value / 60) * 10;
+        context.globalAlpha = 0.72;
         context.fillStyle = marker.color;
         context.beginPath();
         context.arc(point.x, point.y, markerRadius, 0, Math.PI * 2);
         context.fill();
         context.globalAlpha = 1;
-        context.strokeStyle = "rgba(255,255,255,.82)";
-        context.lineWidth = 1.2;
+        context.strokeStyle = "rgba(237,237,237,.75)";
+        context.lineWidth = 1.1;
         context.stroke();
         context.textAlign = "center";
-        context.fillStyle = "#f4f8fb";
-        context.font = "700 12px system-ui, sans-serif";
-        context.fillText(name + " " + value.toFixed(2) + "%", point.x, point.y - markerRadius - 7);
+        context.fillStyle = "#ededed";
+        context.font = "500 11.5px ui-monospace, SFMono-Regular, Menlo, monospace";
+        context.fillText(name + " " + value.toFixed(2) + "%", point.x, point.y - markerRadius - 6);
       });
       context.textAlign = "start";
     }
@@ -206,22 +281,19 @@
       if (!context || destroyed) { return; }
       var size = dimensions();
       sizeCanvas(size);
-      var radius = Math.min(158, size.width * 0.34, (size.height - 90) * 0.45);
+      var radius = Math.min(158, size.width * 0.34, (size.height - 70) * 0.45);
       var centerX = size.width / 2;
-      var centerY = (size.height - 58) / 2;
-      var background = context.createLinearGradient(0, 0, size.width, size.height);
-      background.addColorStop(0, "#07131e");
-      background.addColorStop(1, "#10283a");
-      context.fillStyle = background;
+      var centerY = (size.height - 40) / 2;
+      context.fillStyle = "#0a0d10";
       context.fillRect(0, 0, size.width, size.height);
 
       var sphere = context.createRadialGradient(
         centerX - radius * 0.35, centerY - radius * 0.4, radius * 0.08,
         centerX, centerY, radius
       );
-      sphere.addColorStop(0, "#214c64");
-      sphere.addColorStop(0.72, "#102f44");
-      sphere.addColorStop(1, "#07131e");
+      sphere.addColorStop(0, "#1b2a35");
+      sphere.addColorStop(0.72, "#101a22");
+      sphere.addColorStop(1, "#0a0d10");
       context.fillStyle = sphere;
       context.beginPath();
       context.arc(centerX, centerY, radius, 0, Math.PI * 2);
@@ -233,29 +305,77 @@
       drawGraticule(radius, centerX, centerY);
       drawMarkers(radius, centerX, centerY);
       context.restore();
-      context.strokeStyle = "#6ca9c0";
-      context.lineWidth = 2;
+      context.strokeStyle = "#2a343d";
+      context.lineWidth = 1.4;
       context.beginPath();
       context.arc(centerX, centerY, radius, 0, Math.PI * 2);
       context.stroke();
 
-      context.fillStyle = "#eaf2f7";
-      context.font = "700 14px system-ui, sans-serif";
       context.textAlign = "center";
-      context.fillText("Selected candidate: " + currentKey, centerX, size.height - 34);
-      context.fillStyle = "#f3bf4d";
+      /* The aggregate is reported as text only. It is never given a location, a marker,
+         or a geographic extent, because it is a cohort weighting rather than a place. */
+      context.fillStyle = "#a3adb6";
+      context.font = "11px ui-monospace, SFMono-Regular, Menlo, monospace";
       context.fillText(
         "ALL_OBSERVED cohort-weighted coverage: " +
           Number(currentCoverage.ALL_OBSERVED).toFixed(2) + "% (not worldwide)",
-        centerX,
-        size.height - 12
+        centerX, size.height - 26
+      );
+      context.fillStyle = "#6f787f";
+      context.font = "10.5px ui-monospace, SFMono-Regular, Menlo, monospace";
+      context.fillText(
+        "illustrative graticule · four cohort markers · ALL_OBSERVED is not drawn on the sphere",
+        centerX, size.height - 10
       );
       context.textAlign = "start";
+    }
+
+    /* ---------------------------------------------------------- evidence sync */
+    function renderBars() {
+      if (barsController) { barsController.destroy(); barsController = null; }
+      var rows = COHORTS.map(function (cohort) {
+        return {
+          label: cohort,
+          value: Number(currentCoverage[cohort]),
+          display: Number(currentCoverage[cohort]).toFixed(4) + "%",
+          color: COHORT_COLORS[cohort],
+          variant: "hatched",
+          group: "Observed cohorts · marginal HLA-A/B frequencies"
+        };
+      });
+      rows.push({
+        label: "ALL_OBSERVED",
+        value: Number(currentCoverage.ALL_OBSERVED),
+        display: Number(currentCoverage.ALL_OBSERVED).toFixed(4) + "%",
+        color: COHORT_COLORS.ALL_OBSERVED,
+        variant: "hatched",
+        group: "Cohort-weighted aggregate of the four rows above · not worldwide"
+      });
+      barsController = global.KEYHOLE.charts.bars(barsFig.viewport, {
+        rows: rows,
+        unit: "%",
+        labelWidth: 118,
+        title: "Serialized population coverage for " + currentKey,
+        description: "Percent of sampled genotypes in each observed cohort carrying at least " +
+          "one modeled HLA-A or HLA-B allele that displays this candidate.",
+        ariaLabel: "Coverage percentages for " + currentKey +
+          "; the same values appear in the adjacent table"
+      });
+      var everyValueZero = rows.every(function (item) { return Number(item.value) === 0; });
+      barsFig.setStatus(everyValueZero ?
+        "Every serialized cohort value for this candidate is exactly 0%: no sampled genotype " +
+          "in any observed cohort carries a modeled allele that displays it." :
+        "Values are the serialized per-candidate coverage for " + currentKey + ".");
     }
 
     function updateEvidence() {
       currentKey = selector.value || keys[0];
       currentCoverage = population.per_candidate_coverage[currentKey];
+      globeStage.setAttribute(
+        "aria-label",
+        "Illustrative globe for candidate " + currentKey +
+          "; exact population coverage is listed in the tables below this figure"
+      );
       canvas.setAttribute(
         "aria-label",
         "Schematic orthographic globe for " + currentKey +
@@ -263,37 +383,45 @@
       );
       coverageTable.body.replaceChildren();
       POPULATIONS.forEach(function (name) {
-        var row = node("tr", "");
-        row.appendChild(node("td", "", name));
-        row.appendChild(node("td", "", Number(currentCoverage[name]).toFixed(4)));
-        coverageTable.body.appendChild(row);
+        var row = UI.row(coverageTable.body, [
+          name,
+          { text: Number(currentCoverage[name]).toFixed(4), className: "numeric" },
+          "heuristic approximation"
+        ]);
+        if (name === "ALL_OBSERVED") { row.classList.add("is-selected"); }
       });
 
       matrixTable.body.replaceChildren();
       var cells = population.peptide_allele_matrix[currentKey];
       Object.keys(cells).sort().forEach(function (allele) {
         var cell = cells[allele];
-        var row = node("tr", "");
-        row.appendChild(node("td", "", allele));
-        row.appendChild(node("td", "", Number(cell.ic50).toFixed(1)));
-        row.appendChild(node("td", "", Number(cell.rank).toFixed(2)));
-        row.appendChild(node("td", "", cell.verdict));
-        row.appendChild(node(
-          "td", "matrix-cell " + (cell.visible ? "yes" : "no"), cell.visible ? "yes" : "no"
-        ));
-        row.appendChild(node("td", "", cell.method));
-        matrixTable.body.appendChild(row);
+        var row = UI.row(matrixTable.body, [
+          allele,
+          { text: Number(cell.ic50).toFixed(1), className: "numeric" },
+          { text: Number(cell.rank).toFixed(2), className: "numeric" },
+          cell.verdict,
+          { text: cell.visible ? "yes" : "no", className: cell.visible ? "yes" : "no" },
+          cell.method
+        ]);
+        if (cell.visible) { row.classList.add("is-selected"); }
       });
       caveat.textContent = population.meta.assumption + " Seed " + population.meta.seed + "; " +
         population.meta.draws + " draws. ALL_OBSERVED is cohort-weighted, not worldwide coverage. " +
         "SAS is absent; unmodeled HLA alleles are unknown, not invisible.";
+      renderBars();
+      if (globeController) { globeController.setCoverage(currentCoverage); }
       drawGlobe();
+      if (selection) {
+        var index = keys.indexOf(currentKey);
+        if (index !== -1) { selection.set(selection.get().index, currentKey, "atlas"); }
+      }
     }
 
     function resetGlobe() {
       rotation.longitude = initialRotation.longitude;
       rotation.latitude = initialRotation.latitude;
-      canvasStatus.textContent = "Population globe rotation reset.";
+      if (globeController) { globeController.reset(); }
+      globeStatus.textContent = "Globe rotation reset.";
       drawGlobe();
     }
 
@@ -331,6 +459,9 @@
       if (handled) {
         event.preventDefault();
         rotation.latitude = global.KEYHOLEProjection.clamp(rotation.latitude, -80, 80);
+        if (globeController) {
+          globeController.rotate(event.key === "ArrowLeft" ? -0.14 : (event.key === "ArrowRight" ? 0.14 : 0));
+        }
         drawGlobe();
       }
     }
@@ -339,27 +470,70 @@
       if (destroyed) { return; }
       destroyed = true;
       selector.removeEventListener("change", updateEvidence);
-      reset.removeEventListener("click", resetGlobe);
+      resetGlobeButton.removeEventListener("click", resetGlobe);
       canvas.removeEventListener("pointerdown", pointerDown);
       canvas.removeEventListener("pointermove", pointerMove);
       canvas.removeEventListener("pointerup", pointerUp);
       canvas.removeEventListener("pointercancel", pointerUp);
       canvas.removeEventListener("keydown", keyDown);
-      if (resizeObserver) { resizeObserver.disconnect(); }
+      globeStage.removeEventListener("keydown", keyDown);
+      if (resizeObserver) { resizeObserver.disconnect(); resizeObserver = null; }
+      if (unsubscribeSelection) { unsubscribeSelection(); unsubscribeSelection = null; }
+      if (globeController) { globeController.destroy(); globeController = null; }
+      if (barsController) { barsController.destroy(); barsController = null; }
       container.replaceChildren();
     }
 
     try {
       selector.addEventListener("change", updateEvidence);
-      reset.addEventListener("click", resetGlobe);
+      resetGlobeButton.addEventListener("click", resetGlobe);
       canvas.addEventListener("pointerdown", pointerDown);
       canvas.addEventListener("pointermove", pointerMove);
       canvas.addEventListener("pointerup", pointerUp);
       canvas.addEventListener("pointercancel", pointerUp);
       canvas.addEventListener("keydown", keyDown);
+      globeStage.addEventListener("keydown", keyDown);
       if (global.ResizeObserver) {
         resizeObserver = new global.ResizeObserver(function () { drawGlobe(); });
-        resizeObserver.observe(host);
+        resizeObserver.observe(globeStage);
+      }
+      if (useWebglGlobe) {
+        try {
+          globeController = global.KEYHOLE.globe.mount(globeStage, {
+            coverage: population.per_candidate_coverage[currentKey]
+          });
+          globeStatus.textContent =
+            "WebGL globe ready. Marker size is a bounded display scale over the serialized " +
+            "cohort coverage printed below.";
+        } catch (error) {
+          globeController = null;
+          useWebglGlobe = false;
+        }
+      }
+      if (!useWebglGlobe && !context) {
+        globeStage.appendChild(canvas);
+        try {
+          context = canvas.getContext("2d", { alpha: false });
+          if (context) {
+            globeStatus.textContent =
+              "WebGL is unavailable, so this figure uses the Canvas 2D orthographic globe. " +
+              "The serialized values are identical.";
+          }
+        } catch (error) {
+          context = null;
+        }
+      }
+      if (selection) {
+        unsubscribeSelection = selection.subscribe(function (state) {
+          if (destroyed || state.origin === "atlas") { return; }
+          if (!state.candidateKey || keys.indexOf(state.candidateKey) === -1) { return; }
+          if (selector.value === state.candidateKey) { return; }
+          selector.value = state.candidateKey;
+          updateEvidence();
+        });
+        /* Adopt any selection published before this module subscribed. */
+        var initial = selection.get().candidateKey;
+        if (initial && keys.indexOf(initial) !== -1) { selector.value = initial; }
       }
       updateEvidence();
     } catch (error) {

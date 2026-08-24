@@ -40,7 +40,17 @@ keyhole = [
   "resources/data/residues/famous_proteins.json",
   "resources/data/pdb/*.pdb",
   "resources/web/*.js",
+  "resources/web/*.css",
   "resources/validation/*.json",
+  "resources/vendor/PROVENANCE.md",
+  "resources/vendor/three/three.module.min.js",
+  "resources/vendor/three/LICENSE",
+  "resources/vendor/cobe/index.esm.js",
+  "resources/vendor/cobe/LICENSE",
+  "resources/vendor/phenomenon/phenomenon.umd.js",
+  "resources/vendor/phenomenon/LICENSE",
+  "resources/vendor/fonts/*.woff2",
+  "resources/vendor/fonts/LICENSE.txt",
 ]
 
 [tool.pytest.ini_options]

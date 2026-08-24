@@ -6,6 +6,7 @@ import copy
 import json
 import re
 from functools import lru_cache
+from hashlib import sha256
 from pathlib import Path
 
 import pytest
@@ -17,6 +18,7 @@ from keyhole.parse import parse_famous
 from keyhole.pipeline import screen_variants
 from keyhole.report import SCRIPT_ORDER, render_report, web_root, write_report
 from keyhole.schema import validate_results
+from keyhole.vendor import VENDOR_DIGESTS, vendored_runtime
 
 WEB = web_root()
 LITERATURE_STUB = json.loads(
@@ -125,23 +127,64 @@ def test_report_pdb_payload_is_display_only_fixed_column_subset() -> None:
     assert "ANISOU" not in scenes["3PWN"]["pdb_text"]
 
 
+NETWORK_APIS = (
+    "fetch(",
+    "XMLHttpRequest",
+    "import(",
+    "WebSocket(",
+    "EventSource(",
+    "navigator.sendBeacon",
+    "document.cookie",
+    "credentials:",
+)
+#: The only absolute URI KEYHOLE browser code may contain. It is an XML namespace
+#: identifier consumed by ``document.createElementNS``, never a fetched resource.
+ALLOWED_NAMESPACE_URI = "http://www.w3.org/2000/svg"
+
+
+def test_keyhole_browser_code_uses_no_network_api_or_remote_url() -> None:
+    """KEYHOLE-authored browser code must contain no network API and no remote URL."""
+
+    for name in SCRIPT_ORDER:
+        source = (WEB / name).read_text(encoding="utf-8")
+        for forbidden in NETWORK_APIS:
+            assert forbidden not in source, f"{name} references {forbidden}"
+        remaining = source.replace(ALLOWED_NAMESPACE_URI, "")
+        for scheme in ("https://", "http://", "//cdn", "unpkg", "jsdelivr", "googleapis"):
+            assert scheme not in remaining, f"{name} references {scheme}"
+
+
 def test_report_is_network_free_single_file_with_defensive_csp() -> None:
     html = render_report(_fixture())
-    assert "connect-src 'none'" in html
+    for directive in (
+        "default-src 'none'",
+        "connect-src 'none'",
+        "object-src 'none'",
+        "base-uri 'none'",
+        "form-action 'none'",
+        "img-src data:",
+        "font-src data:",
+    ):
+        assert directive in html
     assert re.search(r"<script[^>]+\bsrc\s*=", html, re.IGNORECASE) is None
     assert re.search(r"<link[^>]+\bhref\s*=", html, re.IGNORECASE) is None
-    for forbidden in (
-        "fetch(",
-        "XMLHttpRequest",
-        "import(",
-        "WebSocket(",
-        "EventSource(",
-        "navigator.sendBeacon",
-        "document.cookie",
-        "credentials:",
-    ):
-        assert forbidden not in html
-    assert 1_000_000 <= len(html.encode("utf-8")) <= 1_750_000
+    assert "<iframe" not in html and "<object" not in html and "<embed" not in html
+    assert "eval(" not in html
+
+    # Every inlined vendor runtime is byte-exact, so no network path can be smuggled in
+    # through a dependency, and the dormant loader code inside a general-purpose engine
+    # is unreachable regardless because connect-src and default-src are 'none'.
+    runtime = vendored_runtime()
+    assert runtime.three_module in html
+    assert runtime.classic_prelude in html
+    for relative, digest in VENDOR_DIGESTS.items():
+        assert sha256(packaged_file(relative).read_bytes()).hexdigest() == digest
+
+    # The KEYHOLE-authored portion of the document keeps the original strict guarantee.
+    keyhole_only = html.replace(runtime.three_module, "").replace(runtime.classic_prelude, "")
+    for forbidden in NETWORK_APIS:
+        assert forbidden not in keyhole_only
+    assert 1_900_000 <= len(html.encode("utf-8")) <= 2_600_000
 
 
 def test_report_bytes_are_deterministic_and_json_script_is_escaped(tmp_path: Path) -> None:
@@ -208,16 +251,46 @@ def test_report_rejects_missing_misaligned_or_mistyped_renderer_evidence() -> No
         render_report(missing_audit)
 
 
-def test_browser_sources_avoid_atlas_markup_injection_and_clean_up_listeners() -> None:
+def test_browser_sources_avoid_markup_injection_and_clean_up_listeners() -> None:
+    """No browser module may build markup from strings, and every mount must tear down."""
+
+    for name in SCRIPT_ORDER:
+        assert "innerHTML" not in (WEB / name).read_text(encoding="utf-8"), name
+        assert "outerHTML" not in (WEB / name).read_text(encoding="utf-8"), name
+        assert "insertAdjacentHTML" not in (WEB / name).read_text(encoding="utf-8"), name
+        assert "document.write" not in (WEB / name).read_text(encoding="utf-8"), name
+
     atlas = (WEB / "atlas.js").read_text(encoding="utf-8")
     main = (WEB / "main.js").read_text(encoding="utf-8")
     funnel = (WEB / "funnel.js").read_text(encoding="utf-8")
-    assert "innerHTML" not in atlas
+    molecule = (WEB / "molecule3d.js").read_text(encoding="utf-8")
+    globe = (WEB / "globe.js").read_text(encoding="utf-8")
+
     assert 'canvas.getContext("2d"' in atlas and "textContent" in atlas
-    assert 'removeEventListener("toggle"' in main
-    assert "if (tornDown)" in main
-    assert "record.controller.destroy()" in main
-    assert "controllers.slice().reverse()" in main
-    assert '"funnel-app", "atlas-app", "theater-app", "structure-app", "methods-app"' in main
     assert 'removeEventListener("change"' in atlas
     assert 'removeEventListener("change"' in funnel
+
+    # The structure viewer is now a tablist rather than lazily opened details elements.
+    assert 'tabs.removeEventListener("click", clicked)' in main
+    assert 'tabs.removeEventListener("keydown", keyed)' in main
+    assert "if (controller) { controller.destroy(); controller = null; }" in main
+    assert "if (tornDown)" in main
+    assert "controllers.slice().reverse()" in main
+    assert (
+        '["funnel-app", "atlas-app", "structures-app", "literature-app", "methods-app"]'
+        in main
+    )
+
+    # WebGL owners must release GPU resources, observers, and frames exactly once.
+    assert "listeners.splice(0).forEach" in molecule
+    assert "renderer.dispose()" in molecule
+    assert "renderer.forceContextLoss()" in molecule
+    assert "geometry.dispose()" in molecule
+    assert "material.dispose()" in molecule or "item.dispose()" in molecule
+    assert "intersectionObserver.disconnect()" in molecule
+    assert "resizeObserver.disconnect()" in molecule
+    assert "global.cancelAnimationFrame(frameId)" in molecule
+    assert "if (destroyed) { return; }" in molecule
+    assert "globe.destroy()" in globe
+    assert "intersectionObserver.disconnect()" in globe
+    assert "if (destroyed) { return; }" in globe

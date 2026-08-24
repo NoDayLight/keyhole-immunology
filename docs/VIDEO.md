@@ -1,23 +1,45 @@
 # KEYHOLE demo video storyboard
 
-Target: 2 minutes 45 seconds. Record at 1440p with terminal text at least 20 px. Do not crop truth labels, caveats, citations, or audit counts.
+Target 2:50. Record at 1440p or higher. Terminal text at least 20 px. Never crop a truth label,
+a method label, a caveat, a citation, or an audit count.
+
+Build the artifact before recording so nothing is generated on camera except the run you narrate:
+
+```sh
+SOURCE_DATE_EPOCH=1787529600 .venv/bin/keyhole screen \
+  --maf data/examples/tcga_skcm.maf --hla 'A*02:01,B*07:02' --report docs/index.html
+```
+
+## Shot list
 
 | Time | Picture | Voiceover |
 |---|---|---|
-| 0:00–0:15 | Title, then the three-command README quickstart. | “Tumors alter the protein fragments cells display to T cells. KEYHOLE turns a real tumor mutation file and patient HLA types into one inspectable offline report.” |
-| 0:15–0:35 | Run `keyhole validate`; hold on reproduced metrics. | “The package ships its frozen data and 26 allele-specific models. Validation reproduces held-out peptide-level Spearman and censor-aware ROC without retraining or network access.” |
-| 0:35–0:55 | Run the SKCM `screen` command; highlight 100 input rows, 89 supported changes, 2 screenable variants, 87 missing-context rows, and 38 candidates. | “Unsupported rows are counted, not silently discarded or assigned invented sequences. Only frozen canonical BRAF and TP53 contexts are screenable here.” |
-| 0:55–1:25 | Open funnel; switch candidates; point to method labels and patient HLA scores. | “Binding is measured-data machine learning. Cleavage, TAP, foreignness, agretopicity interpretation, and the final visibility language are transparent heuristic approximations. Patient conclusions use only the supplied HLA alleles.” |
-| 1:25–1:45 | Open population atlas and allele matrix. | “Population evidence separately evaluates all 26 modeled alleles. Coverage uses real AFR, AMR, EAS, and EUR marginals with explicit linkage-equilibrium and Hardy-Weinberg assumptions. The aggregate is not worldwide coverage.” |
-| 1:45–2:15 | Open 1HHK and rotate/zoom; show SVG fallback; open 1AO7; return to candidate schematic. Keep badges visible. | “Experimental scenes use untouched PDB coordinates and say ‘Real crystal structure.’ Candidate beads say ‘Schematic—data real, geometry illustrative’; they are not docking or predicted structures.” |
-| 2:15–2:30 | Scroll published panel and limitations. | “The published panel contains real positive T-cell assays. Shuffled controls are explicitly synthetic, not experimental negatives, and HLA-C*08:02 remains unsupported.” |
-| 2:30–2:45 | Disconnect network or show DevTools network empty; reload local `file:` report; end on ‘What this does NOT do’. | “The final artifact is a single file with no CDN, server, credentials, or runtime requests. It explains candidate visibility; it does not diagnose, recommend treatment, or prove immunogenicity.” |
+| 0:00–0:12 | Cold open on the report's first fold. Rotate the 1HHK scene once with the mouse. | "This is a real crystal structure. The blue tubes are a human HLA molecule. The gold chain is a protein fragment sitting in its groove, which is how your immune system checks a cell from the inside." |
+| 0:12–0:30 | Cut to terminal. `.venv/bin/keyhole validate`. Hold on the reproduced metrics line. | "Cancer alters those fragments. KEYHOLE reads a real tumour mutation file and asks which altered fragments a given set of HLA molecules could actually display. Twenty-six allele-specific models ship inside the package. Validation reproduces held-out Spearman and censor-aware ROC AUC from frozen data, with no network and no retraining." |
+| 0:30–0:50 | Run the `screen` command on `data/examples/tcga_skcm.maf`. Highlight 100 rows, 89 supported, 2 screenable, 87 missing context, 38 candidates. Then the audit ladder in the report. | "One hundred real TCGA rows in. Eighty-seven are dropped because KEYHOLE has no frozen canonical protein context for them. It counts what it discarded instead of inventing a sequence, and the same four numbers appear in the report." |
+| 0:50–1:00 | Report first fold. Point at the 0 / 0 / 38 verdict strip, then the two truth-boundary callouts. | "Binding is measured-data machine learning. Processing, foreignness, verdicts, and population coverage are labelled heuristic approximations. The HLA alleles are a command-line input, not a patient genotype." |
+| 1:00–1:35 | Section 01. Press *Replay candidate flow* and let it run. Then hover one particle. Then click three candidates in the list. | "Thirty-eight candidates, one particle each, four inspection gates. Eight stop at the proteasome, five at the TAP channel, sixteen at the HLA groove, nine reach the final check. Those counts are tallies of reason codes that Python already wrote. The browser never re-applies a threshold. It can explain a rejection; it cannot decide one." |
+| 1:35–1:55 | The gate ladder and the radar for one selected candidate. Point at the red axis, then a grey value. | "Every gate prints its exact serialized value and the method that produced it. The red axis is the gate whose reason code stopped this candidate. Grey means the pipeline never reached that gate, so the number exists but no decision was made. The radar is a profile, not a score, and its axis domains are in the table underneath." |
+| 1:55–2:15 | Section 02. Drag the globe. Then the bar chart, then the exact coverage table. | "Coverage uses real AFR, AMR, EAS and EUR frequencies under stated linkage-equilibrium and Hardy-Weinberg assumptions. The geography is decoration. The aggregate is cohort-weighted and never drawn as a place, South Asian data is reported absent rather than zero, and hatched fill means heuristic throughout." |
+| 2:15–2:35 | Section 03. Switch to the 1AO7 tab, rotate, then switch to *All displayed atoms*. Then back to a candidate scene. | "Five thousand four hundred and seventy-six measured atoms, five chains, including both T-cell receptor chains. Nothing is moved to make the picture look better. Candidate scenes are labelled real backbone with illustrative side-chain geometry, and the illustrative atom is drawn translucent so you can't mistake it for a measured one." |
+| 2:35–2:50 | Section 04 strata table. Then open DevTools Network, reload the `file:` URL, show it empty. End on *What KEYHOLE refuses to claim*. | "Published T-cell positivity and KEYHOLE visibility are different endpoints, stratified by whether the peptide was in the training data, with every denominator shown. Shuffled controls are synthetic, never assayed negatives. One file, no server, zero requests. It explains visibility. It does not diagnose, recommend treatment, or prove immunogenicity." |
+
+## Optional 15-second Kiro coda
+
+Show `.kiro/specs/` with eighteen spec folders, open `r8-presentation-grade-report/requirements.md`,
+then `.kiro/steering/invariants.md`.
+
+"Eighteen spec boundaries, each with requirements, design and tasks, plus four steering files
+that Kiro applied to every turn. Invariant two is why every 3D scene in this report carries a
+truth label."
 
 ## Recording checklist
 
-- Use the deterministic Pages build (`SOURCE_DATE_EPOCH=1787529600`) so timestamps and values match the checked-in demo.
-- Show the `file:` URL at least once and keep the network panel visible during one reload.
-- Demonstrate pointer rotation, wheel zoom, keyboard arrows, Home reset, and the reduced-detail SVG fallback.
-- Read “measured-data ML” and “heuristic approximation” aloud; never shorten either to “measured” or “prediction.”
-- Never describe synthetic decoys as negatives, population estimates as global, or schematic beads as molecular structures.
-- End with the non-clinical limitation and full provenance link.
+- Use the fixed-epoch build so on-screen values match the committed `docs/index.html`.
+- Show the `file:` URL at least once, and keep the network panel visible during one reload.
+- Demonstrate drag, wheel zoom, arrow keys, and `Home` on one molecular scene.
+- Toggle the OS reduced-motion setting once and show the static evidence path.
+- Say "measured-data machine learning" and "heuristic approximation" in full. Never shorten
+  either to "measured" or "prediction".
+- Never call synthetic decoys negatives, coverage worldwide, or illustrative geometry structure.
+- Close on the non-clinical limitation.
