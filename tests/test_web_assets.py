@@ -108,6 +108,11 @@ def test_funnel_particles_are_seeded_serialized_and_fallback_safe() -> None:
         assert reason in source
     assert 'FUNNEL_TRUTH = "Schematic — data real, geometry illustrative"' in source
     assert "Replay candidate flow" in source
+    # Candidate rows are a real listbox: Home/End should reach the filtered bounds,
+    # not just move one row at a time.
+    assert 'var navigationKeys = ["ArrowDown", "ArrowUp", "Home", "End"];' in source
+    assert 'if (event.key === "Home") { next = 0; }' in source
+    assert 'if (event.key === "End") { next = indices.length - 1; }' in source
     assert "global.requestAnimationFrame(animationFrame)" in source
     assert "global.cancelAnimationFrame(frameId)" in source
     assert "tooltip.textContent = tooltipText(nearest.item)" in source

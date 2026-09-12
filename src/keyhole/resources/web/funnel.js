@@ -936,12 +936,16 @@
     }
 
     function listKeys(event) {
-      if (event.key !== "ArrowDown" && event.key !== "ArrowUp") { return; }
+      var navigationKeys = ["ArrowDown", "ArrowUp", "Home", "End"];
+      if (navigationKeys.indexOf(event.key) === -1) { return; }
       var indices = visibleIndices();
       var position = indices.indexOf(selected);
       if (position === -1) { return; }
-      var next = event.key === "ArrowDown" ?
-        Math.min(indices.length - 1, position + 1) : Math.max(0, position - 1);
+      var next = position;
+      if (event.key === "ArrowDown") { next = Math.min(indices.length - 1, position + 1); }
+      if (event.key === "ArrowUp") { next = Math.max(0, position - 1); }
+      if (event.key === "Home") { next = 0; }
+      if (event.key === "End") { next = indices.length - 1; }
       if (next === position) { return; }
       event.preventDefault();
       selectIndex(indices[next]);
